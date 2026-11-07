@@ -1,0 +1,16 @@
+# Single virtualenv for the ML pipeline, the agent's Python code, the backend and tests.
+# scikit-learn/numpy/joblib versions MUST match services/ebpf-agent/requirements.txt
+# so the trained model unpickles inside the agent container.
+numpy==2.2.6
+scikit-learn==1.6.1
+joblib==1.5.1
+pandas==2.2.3
+requests==2.32.4
+fastapi==0.115.14
+uvicorn[standard]==0.34.3
+pymongo==4.13.2
+pyjwt==2.10.1
+bcrypt==4.3.0
+pydantic==2.11.7
+httpx==0.28.1
+pytest==8.4.1

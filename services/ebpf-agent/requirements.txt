@@ -1,0 +1,5 @@
+# keep in sync with /requirements-dev.txt (the model is pickled with these versions)
+numpy==2.2.6
+scikit-learn==1.6.1
+joblib==1.5.1
+requests==2.32.4

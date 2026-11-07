@@ -1,0 +1,30 @@
+# Target workload for evaluation/run_live_eval.py
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ids-demo
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shop-web
+  namespace: ids-demo
+  labels: {app: shop-web}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: shop-web}
+  template:
+    metadata:
+      labels: {app: shop-web}
+    spec:
+      containers:
+        - name: web
+          image: ids-victim:latest
+          imagePullPolicy: Never
+          ports: [{containerPort: 8080}]
+          readinessProbe:
+            httpGet: {path: /health, port: 8080}
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {memory: 256Mi}

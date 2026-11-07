@@ -1,0 +1,57 @@
+# Event storage (MongoDB). Credentials come from the ids-secrets Secret created by scripts/deploy_minikube.sh
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ids-mongodb-data
+  namespace: ebpf-ids
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ids-mongodb
+  namespace: ebpf-ids
+  labels: {app.kubernetes.io/name: ids-mongodb, app.kubernetes.io/part-of: ebpf-ids}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app.kubernetes.io/name: ids-mongodb}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: ids-mongodb, app.kubernetes.io/part-of: ebpf-ids}
+    spec:
+      containers:
+        - name: mongodb
+          image: mongo:7.0
+          imagePullPolicy: IfNotPresent
+          args: ["--wiredTigerCacheSizeGB", "0.25"]
+          env:
+            - name: MONGO_INITDB_ROOT_USERNAME
+              value: ids
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              valueFrom: {secretKeyRef: {name: ids-secrets, key: mongo-password}}
+          ports: [{containerPort: 27017, name: mongo}]
+          readinessProbe:
+            tcpSocket: {port: 27017}
+            periodSeconds: 10
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {memory: 700Mi}
+          volumeMounts: [{name: data, mountPath: /data/db}]
+      volumes:
+        - name: data
+          persistentVolumeClaim: {claimName: ids-mongodb-data}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ids-mongodb
+  namespace: ebpf-ids
+spec:
+  selector: {app.kubernetes.io/name: ids-mongodb}
+  ports: [{port: 27017, targetPort: 27017, name: mongo}]

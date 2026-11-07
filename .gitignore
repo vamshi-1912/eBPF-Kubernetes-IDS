@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.pytest_cache/
+
+# Node / frontend
+node_modules/
+services/frontend/dist/
+
+# eBPF build output
+services/ebpf-agent/build/
+
+# Secrets / local env (credentials live in the ids-secrets Kubernetes Secret)
+.env
+.secrets/
+
+# Logs
+*.log

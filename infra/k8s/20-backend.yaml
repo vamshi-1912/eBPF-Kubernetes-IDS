@@ -1,0 +1,51 @@
+# FastAPI backend: REST APIs for events, alerts and analytics
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ids-backend
+  namespace: ebpf-ids
+  labels: {app.kubernetes.io/name: ids-backend, app.kubernetes.io/part-of: ebpf-ids}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: ids-backend}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: ids-backend, app.kubernetes.io/part-of: ebpf-ids}
+    spec:
+      containers:
+        - name: backend
+          image: ids-backend:latest
+          imagePullPolicy: Never   # image is built locally and loaded into minikube
+          ports: [{containerPort: 8000, name: http}]
+          env:
+            - {name: MONGO_URI, valueFrom: {secretKeyRef: {name: ids-secrets, key: mongo-uri}}}
+            - {name: JWT_SECRET, valueFrom: {secretKeyRef: {name: ids-secrets, key: jwt-secret}}}
+            - {name: AGENT_TOKEN, valueFrom: {secretKeyRef: {name: ids-secrets, key: agent-token}}}
+            - {name: ADMIN_PASSWORD, valueFrom: {secretKeyRef: {name: ids-secrets, key: admin-password}}}
+            - {name: ADMIN_USERNAME, value: admin}
+            - {name: EVENT_TTL_HOURS, value: "24"}
+            - {name: CORS_ORIGINS, value: "http://localhost:5173"}
+          readinessProbe:
+            httpGet: {path: /healthz, port: 8000}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /healthz, port: 8000}
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {memory: 384Mi}
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ids-backend
+  namespace: ebpf-ids
+spec:
+  selector: {app.kubernetes.io/name: ids-backend}
+  ports: [{port: 8000, targetPort: 8000, name: http}]

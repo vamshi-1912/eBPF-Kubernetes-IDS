@@ -1,6 +1,6 @@
 import React from 'react'
 
-export const SEV_COLOR = { High: '#ef4444', Medium: '#f59e0b', Low: '#38bdf8' }
+export const SEV_COLOR = { High: '#FF3B30', Medium: '#FF9500', Low: '#007AFF' }
 export const CAT_LABEL = {
   reverse_shell: 'Reverse shell', dropper: 'Dropper / payload', crypto_miner: 'Crypto miner',
   privilege_escalation: 'Privilege escalation', container_escape: 'Container escape',
@@ -10,10 +10,10 @@ export const CAT_LABEL = {
 
 export function Card({ title, right, children, className = '' }) {
   return (
-    <div className={`card p-4 ${className}`}>
+    <div className={`card ${className}`}>
       {(title || right) && (
-        <div className="mb-3 flex items-center justify-between gap-2">
-          <h3 className="text-sm font-semibold text-slate-300">{title}</h3>
+        <div className="mb-4 flex min-w-0 items-center justify-between gap-2">
+          <h3 className="min-w-0 text-[15px] font-semibold text-[#1D1D1F]">{title}</h3>
           {right}
         </div>
       )}
@@ -22,51 +22,54 @@ export function Card({ title, right, children, className = '' }) {
   )
 }
 
-export function Stat({ label, value, sub, icon: Icon, tone = 'text-slate-100' }) {
+export function Stat({ label, value, sub, icon: Icon, tone = 'text-[#1D1D1F]' }) {
   return (
-    <div className="card p-4">
-      <div className="flex items-start justify-between">
-        <p className="text-xs uppercase tracking-wider text-slate-500">{label}</p>
-        {Icon && <Icon className="h-4 w-4 text-slate-500" />}
+    <div className="card p-4 md:p-5">
+      <div className="flex items-start justify-between gap-3">
+        <p className="min-w-0 text-[11px] font-medium uppercase tracking-[0.12em] text-[#86868B]">{label}</p>
+        {Icon && <Icon className="h-4 w-4 shrink-0 text-[#007AFF]" />}
       </div>
-      <p className={`mt-2 text-2xl font-bold ${tone}`}>{value ?? '—'}</p>
-      {sub && <p className="mt-1 text-xs text-slate-500">{sub}</p>}
+      <p className={`mt-3 text-[28px] font-semibold leading-none tracking-[-0.03em] ${tone}`}>{value ?? '—'}</p>
+      {sub && <p className="mt-2 text-xs text-[#86868B]">{sub}</p>}
     </div>
   )
 }
 
 export function SeverityBadge({ severity }) {
-  if (!severity) return <span className="text-slate-600">—</span>
+  if (!severity) return <span className="text-[#86868B]">—</span>
   const cls = {
-    High: 'bg-red-500/15 text-red-400 border-red-500/30',
-    Medium: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
-    Low: 'bg-sky-500/15 text-sky-400 border-sky-500/30',
+    High: 'border-[#FF3B30]/20 bg-[#FFE5E3] text-[#FF3B30]',
+    Medium: 'border-[#FF9500]/20 bg-[#FFF1E0] text-[#FF9500]',
+    Low: 'border-[#007AFF]/20 bg-[#EAF3FF] text-[#007AFF]',
   }[severity]
-  return <span className={`inline-block rounded border px-2 py-0.5 text-xs font-semibold ${cls}`}>{severity}</span>
+  return <span className={`inline-block rounded-full border px-2 py-0.5 text-[11px] font-semibold ${cls}`}>{severity}</span>
 }
 
 export function StatusBadge({ status }) {
   const cls = {
-    open: 'bg-red-500/10 text-red-300', acknowledged: 'bg-amber-500/10 text-amber-300',
-    resolved: 'bg-emerald-500/10 text-emerald-300',
-  }[status] || 'bg-slate-800 text-slate-400'
-  return <span className={`rounded px-2 py-0.5 text-xs ${cls}`}>{status}</span>
+    open: 'bg-[#FFE5E3] text-[#FF3B30]',
+    acknowledged: 'bg-[#FFF1E0] text-[#FF9500]',
+    resolved: 'bg-[#EAF3FF] text-[#007AFF]',
+  }[status] || 'bg-[#F5F5F7] text-[#86868B]'
+  return <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${cls}`}>{status}</span>
 }
 
 export function LabelBadge({ event }) {
   const p = event.prediction || {}
-  if (!event.k8s_context) return <span className="rounded bg-slate-800 px-2 py-0.5 text-xs text-slate-400">raw</span>
-  if (p.label === 'suspicious') return <span className="rounded bg-red-500/15 px-2 py-0.5 text-xs text-red-300">suspicious</span>
-  return <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-300">normal</span>
+  if (!event.k8s_context) return <span className="rounded-full bg-[#F5F5F7] px-2 py-0.5 text-[11px] text-[#86868B]">raw</span>
+  if (p.label === 'suspicious') return <span className="rounded-full bg-[#FFE5E3] px-2 py-0.5 text-[11px] text-[#FF3B30]">suspicious</span>
+  return <span className="rounded-full bg-[#EAF3FF] px-2 py-0.5 text-[11px] text-[#007AFF]">normal</span>
 }
 
 export function RiskBar({ score }) {
   const s = Math.round(score || 0)
-  const color = s >= 80 ? 'bg-red-500' : s >= 60 ? 'bg-amber-500' : 'bg-sky-500'
+  const color = s >= 80 ? 'bg-[#FF3B30]' : s >= 60 ? 'bg-[#FF9500]' : 'bg-[#007AFF]'
   return (
     <div className="flex items-center gap-2">
-      <div className="h-1.5 w-16 rounded bg-slate-800"><div className={`h-1.5 rounded ${color}`} style={{ width: `${s}%` }} /></div>
-      <span className="mono text-xs text-slate-400">{s}</span>
+      <div className="h-1.5 w-16 overflow-hidden rounded-full bg-[#E5E5EA]">
+        <div className={`h-full rounded-full ${color}`} style={{ width: `${s}%` }} />
+      </div>
+      <span className="mono text-[11px] text-[#86868B]">{s}</span>
     </div>
   )
 }
@@ -97,14 +100,21 @@ export function subject(ev) {
 }
 
 export function Empty({ children = 'No data yet' }) {
-  return <div className="flex h-full min-h-24 items-center justify-center text-sm text-slate-500">{children}</div>
+  return <div className="flex h-full min-h-24 items-center justify-center text-sm text-[#86868B]">{children}</div>
 }
 
 export function ErrorNote({ error }) {
-  return error ? <div className="mb-3 rounded border border-red-900 bg-red-950/40 px-3 py-2 text-sm text-red-300">{String(error)}</div> : null
+  return error ? <div className="mb-4 rounded-xl border border-[#FF3B30]/20 bg-[#FFE5E3] px-3 py-2 text-sm text-[#B21D18]">{String(error)}</div> : null
 }
 
 export const tooltipStyle = {
-  contentStyle: { background: '#0f172a', border: '1px solid #334155', borderRadius: 8, fontSize: 12 },
-  labelStyle: { color: '#cbd5e1' },
+  contentStyle: {
+    background: '#FFFFFF',
+    border: '1px solid #E5E5EA',
+    borderRadius: 12,
+    fontSize: 12,
+    boxShadow: '0 8px 20px rgba(29,29,31,0.08)',
+  },
+  labelStyle: { color: '#1D1D1F' },
+  itemStyle: { color: '#1D1D1F' },
 }

@@ -17,6 +17,7 @@ Guide: Mrs. Geetla Srujana · Team: Yashoda Adarsh (B210010), Arre Sahithya (B21
 
 ## Contents
 
+- [How it works internally](#how-it-works-internally)
 - [Tools required](#tools-required)
 - [How to run](#how-to-run)
 - [Try it manually](#try-it-manually)
@@ -27,6 +28,42 @@ Guide: Mrs. Geetla Srujana · Team: Yashoda Adarsh (B210010), Arre Sahithya (B21
 - [Troubleshooting](#troubleshooting)
 - [Limitations and future work](#limitations-and-future-work)
 - [References](#references)
+
+---
+
+## How it works internally
+
+The platform watches Kubernetes workloads in real time and converts raw kernel activity into security alerts.
+
+1. Each node runs an eBPF agent as a DaemonSet.
+2. The eBPF program captures kernel events such as `exec`, `open`, `connect`, `mount`, `setuid`, and `ptrace` from the host and container namespaces.
+3. The agent enriches each event with Kubernetes metadata such as Pod name, namespace, container, and workload.
+4. The Python pipeline extracts features, checks them against a trained ML model and deterministic security rules, and assigns a risk score.
+5. Suspicious activity becomes an alert and is stored in MongoDB.
+6. The FastAPI backend exposes the event and alert data to the dashboard.
+7. The React dashboard shows live overview metrics, alert history, event streams, and evaluation results.
+
+```mermaid
+flowchart LR
+    User[Security Admin] --> UI[React Dashboard]
+    UI --> API[FastAPI Backend]
+    API --> DB[(MongoDB)]
+
+    subgraph K8S[Kubernetes Cluster]
+        Agent[eBPF Agent DaemonSet]
+        Pod1[Workloads / Pods]
+        Pod2[Workloads / Pods]
+    end
+
+    Pod1 --> Agent
+    Pod2 --> Agent
+    Agent --> FEAT[Feature Extraction + ML + Rules]
+    FEAT --> Alert[Alerts / Risk Scores]
+    Alert --> API
+    Alert --> DB
+```
+
+This creates a loop where runtime behavior is captured at the kernel level, enriched with Kubernetes context, scored, and surfaced to operators in near real time.
 
 ---
 

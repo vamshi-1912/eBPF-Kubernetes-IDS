@@ -40,6 +40,16 @@ from ids_agent.features import FEATURE_NAMES  # noqa: E402
 from train_model import build_matrix  # noqa: E402
 
 
+def build_matrix_parallel(df: pd.DataFrame, workers: int) -> np.ndarray:
+    """Feature extraction split across processes (it is pure Python and CPU-bound)."""
+    if workers <= 1 or len(df) < 50_000:
+        return build_matrix(df)
+    from concurrent.futures import ProcessPoolExecutor
+    chunks = np.array_split(np.arange(len(df)), workers * 4)
+    with ProcessPoolExecutor(max_workers=workers) as ex:
+        return np.vstack(list(ex.map(build_matrix, (df.iloc[c] for c in chunks))))
+
+
 def binary_report(y_true, y_pred, score=None) -> dict:
     tn, fp, fn, tp = confusion_matrix(y_true, y_pred, labels=[0, 1]).ravel()
     out = {
@@ -77,6 +87,11 @@ def main():
     ap.add_argument("--model", default=os.path.join(HERE, "model", "ids_model.joblib"))
     ap.add_argument("--train-data", default=os.path.join(HERE, "training_data.csv"))
     ap.add_argument("--out", default=os.path.join(HERE, "model", "test_evaluation.json"))
+    ap.add_argument("--label-col", default="is_malicious", help="binary ground-truth column")
+    ap.add_argument("--binary-only", action="store_true",
+                    help="skip the multi-class section (datasets without attack categories, e.g. BETH)")
+    ap.add_argument("--workers", type=int, default=os.cpu_count() or 1, help="processes for feature extraction")
+    ap.add_argument("--group-col", help="also report binary metrics per value of this column (e.g. host)")
     a = ap.parse_args()
 
     bundle = joblib.load(a.model)
@@ -86,8 +101,8 @@ def main():
     print(f"Model {bundle.get('version')}  threshold={threshold}  classes={len(classes)}")
 
     df = pd.read_csv(a.data, keep_default_na=False)
-    X = build_matrix(df)
-    y_bin = df["is_malicious"].to_numpy().astype(int)
+    X = build_matrix_parallel(df, a.workers)
+    y_bin = df[a.label_col].to_numpy().astype(int)
     y_cat = df["attack_category"].to_numpy()
     print(f"Test set {a.data}: {len(df)} rows ({y_bin.sum()} malicious, {(1 - y_bin).sum()} benign)")
 
@@ -97,38 +112,33 @@ def main():
     y_pred_cat = model.predict(X)
 
     report = {"generated_at": datetime.now(timezone.utc).isoformat(), "model_version": bundle.get("version"),
-              "test_data": os.path.relpath(a.data, os.path.join(HERE, "..")), "threshold": threshold}
+              "test_data": os.path.relpath(a.data, os.path.join(HERE, "..")), "label_column": a.label_col,
+              "threshold": threshold}
 
     # ---- 1. binary -------------------------------------------------------------------
     report["binary_ml"] = binary_report(y_bin, y_pred_bin, p_mal)
     print_binary("Binary: Random Forest only", report["binary_ml"])
 
     # ---- 2. multi-class --------------------------------------------------------------
-    labels = classes
-    cm = confusion_matrix(y_cat, y_pred_cat, labels=labels)
-    cr = classification_report(y_cat, y_pred_cat, labels=labels, output_dict=True, zero_division=0)
-    report["multiclass"] = {
-        "accuracy": round(accuracy_score(y_cat, y_pred_cat), 4),
-        "f1_macro": round(f1_score(y_cat, y_pred_cat, average="macro", zero_division=0), 4),
-        "f1_weighted": round(f1_score(y_cat, y_pred_cat, average="weighted", zero_division=0), 4),
-        "labels": labels,
-        "confusion_matrix": cm.tolist(),
-        "per_class": {c: {k: round(v, 4) if isinstance(v, float) else v for k, v in cr[c].items()} for c in labels},
-    }
-    print(f"\n--- Multi-class (benign + {len(labels) - 1} attack categories) ---")
-    print(classification_report(y_cat, y_pred_cat, labels=labels, digits=4, zero_division=0))
-    short = [c[:8] for c in labels]
-    print("Confusion matrix (rows = actual, cols = predicted):")
-    print(" " * 22 + "".join(f"{s:>9}" for s in short))
-    for c, row in zip(labels, cm):
-        print(f"  {c:<20}" + "".join(f"{v:>9}" for v in row))
+    if not a.binary_only:
+        multiclass_section(report, y_cat, y_pred_cat, classes)
+
+    # ---- 2b. per group ---------------------------------------------------------------
+    if a.group_col:
+        groups = df[a.group_col].to_numpy()
+        report["per_group"] = {}
+        for g in sorted(set(groups)):
+            m = groups == g
+            report["per_group"][str(g)] = binary_report(y_bin[m], y_pred_bin[m], p_mal[m])
+            print_binary(f"{a.group_col} = {g}", report["per_group"][str(g)])
 
     # ---- 3. edge cases ---------------------------------------------------------------
     edge = df["is_edge_case"].to_numpy() == 1
-    report["edge_cases"] = binary_report(y_bin[edge], y_pred_bin[edge], p_mal[edge])
-    report["non_edge_cases"] = binary_report(y_bin[~edge], y_pred_bin[~edge], p_mal[~edge])
-    print_binary("Edge cases only", report["edge_cases"])
-    print_binary("Non-edge cases", report["non_edge_cases"])
+    if edge.any() and (~edge).any():
+        report["edge_cases"] = binary_report(y_bin[edge], y_pred_bin[edge], p_mal[edge])
+        report["non_edge_cases"] = binary_report(y_bin[~edge], y_pred_bin[~edge], p_mal[~edge])
+        print_binary("Edge cases only", report["edge_cases"])
+        print_binary("Non-edge cases", report["non_edge_cases"])
 
     # ---- 4. full agent decision: ML + rules (detector.Detector.assess) ---------------
     det = Detector(a.model)
@@ -181,6 +191,31 @@ def main():
     with open(a.out, "w") as fh:
         json.dump(report, fh, indent=2)
     print(f"\nSaved {a.out}")
+
+
+
+def multiclass_section(report, y_cat, y_pred_cat, classes):
+    """Only rows whose true label is one of the model's classes (drops e.g. BETH's unlabelled attacks)."""
+    known = np.isin(y_cat, classes)
+    y_cat, y_pred_cat = y_cat[known], y_pred_cat[known]
+    labels = classes
+    cm = confusion_matrix(y_cat, y_pred_cat, labels=labels)
+    cr = classification_report(y_cat, y_pred_cat, labels=labels, output_dict=True, zero_division=0)
+    report["multiclass"] = {
+        "accuracy": round(accuracy_score(y_cat, y_pred_cat), 4),
+        "f1_macro": round(f1_score(y_cat, y_pred_cat, average="macro", zero_division=0), 4),
+        "f1_weighted": round(f1_score(y_cat, y_pred_cat, average="weighted", zero_division=0), 4),
+        "labels": labels,
+        "confusion_matrix": cm.tolist(),
+        "per_class": {c: {k: round(v, 4) if isinstance(v, float) else v for k, v in cr[c].items()} for c in labels},
+    }
+    print(f"\n--- Multi-class (benign + {len(labels) - 1} attack categories) ---")
+    print(classification_report(y_cat, y_pred_cat, labels=labels, digits=4, zero_division=0))
+    short = [c[:8] for c in labels]
+    print("Confusion matrix (rows = actual, cols = predicted):")
+    print(" " * 22 + "".join(f"{s:>9}" for s in short))
+    for c, row in zip(labels, cm):
+        print(f"  {c:<20}" + "".join(f"{v:>9}" for v in row))
 
 
 if __name__ == "__main__":

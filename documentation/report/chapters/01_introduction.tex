@@ -1,0 +1,123 @@
+\chapter{Introduction}
+
+\section{Background}
+
+Cloud-native applications are built from many small services packaged as containers
+and orchestrated by \textbf{Kubernetes}. Kubernetes groups containers into
+\emph{Pods}, schedules them on worker \emph{nodes} and isolates teams and applications
+with \emph{namespaces}. Containers are not virtual machines: every container on a node
+shares the same Linux kernel and is separated from its neighbours only by kernel
+namespaces, control groups (cgroups) and capability restrictions. A process that
+escapes this isolation, or that simply abuses the permissions it already has, can
+affect every other workload on the node.
+
+Most container security tools act \emph{before} a workload runs: images are scanned
+for known vulnerabilities, manifests are checked against policies and admission
+controllers reject risky configurations. These controls are necessary but they cannot
+see what happens \emph{after} deployment. If an attacker exploits a vulnerable web
+application and obtains a shell inside a pod, the actions that follow (downloading a
+payload, opening a reverse shell, reading the service-account token, scanning the
+cluster network or trying to break out of the container) are only visible at the level
+of the operating system kernel.
+
+The \textbf{extended Berkeley Packet Filter (eBPF)} makes this visibility practical.
+eBPF allows small, verified programs to be loaded into the running Linux kernel and
+attached to tracepoints, without kernel modules and without changing the application.
+An eBPF program can observe every process execution, file open or network connection
+on a node with very low overhead and stream the data to user space. Combining this
+kernel-level telemetry with Kubernetes metadata and machine learning is the idea
+behind this project.
+
+\section{Motivation}
+
+Runtime attacks on containers are common and well documented. Crypto-mining
+campaigns such as Kinsing and TeamTNT compromise exposed containers and run miners
+from hidden directories in \texttt{/tmp}; exploited web applications are used to open
+reverse shells; stolen service-account tokens give attackers access to the Kubernetes
+API; and privileged pods are abused to escape to the host with tools such as
+\texttt{nsenter}. The MITRE ATT\&CK framework now contains a dedicated matrix for
+containers that lists these techniques.
+
+Existing open-source runtime tools (for example Falco, Tetragon and Tracee) are
+powerful but are mainly rule-driven: they detect exactly what their rules describe and
+require security expertise to tune. Pure machine-learning approaches, on the other
+hand, are often evaluated offline on old system-call datasets and are rarely deployed
+in a real cluster with Kubernetes context, latency measurements and an operator
+interface. Small and medium-sized organisations in particular need a system that is
+easy to deploy, explains \emph{why} something was flagged and is honest about its
+detection rate and false positives.
+
+This motivated us to build a complete, deployable runtime IDS that combines the
+precision of rules with the generalisation of machine learning, enriches every alert
+with Kubernetes context, and is evaluated not only on its own synthetic data but also
+on real public datasets and live attack simulations.
+
+\section{Problem Statement}
+
+Kubernetes clusters lack an easy-to-deploy mechanism that can observe runtime
+behaviour of containers at the kernel level, decide automatically whether that
+behaviour is malicious, and present the result to an administrator with enough context
+to act. In particular:
+\begin{itemize}
+    \item \textbf{No runtime visibility:} image scanning and admission control do not
+          observe process, file and network activity after deployment.
+    \item \textbf{Missing Kubernetes context:} kernel events carry PIDs and cgroup IDs,
+          not Pod, container, namespace or workload names.
+    \item \textbf{Rules alone do not generalise:} signature rules miss variants of an
+          attack and need constant tuning.
+    \item \textbf{ML alone is hard to trust:} a probability without a reason, severity or
+          technique is difficult for an operator to act upon.
+    \item \textbf{False positives:} legitimate platform behaviour (container runtimes,
+          CoreDNS, health probes, CI jobs) often looks similar to attacks.
+    \item \textbf{Overhead:} monitoring must not noticeably slow down the workloads it
+          protects.
+\end{itemize}
+
+\section{Objectives of the Project}
+
+The objective of this project is to design, implement and evaluate an eBPF-based
+runtime intrusion detection system for Kubernetes. The specific objectives are:
+\begin{enumerate}
+    \item To capture security-relevant kernel events (process, file, network, privilege
+          and namespace changes) from every container using \textbf{eBPF and libbpf
+          CO-RE}.
+    \item To map every event to its \textbf{Pod, container, namespace and workload}.
+    \item To convert events into a fixed set of \textbf{behavioural features} that is shared
+          by training and live inference.
+    \item To build a labelled \textbf{runtime-telemetry dataset} including difficult edge
+          cases, and to train a \textbf{Random Forest} classifier on it.
+    \item To combine ML with \textbf{deterministic rules} into a 0--100 risk score with
+          Low / Medium / High severity and a \textbf{MITRE ATT\&CK} technique.
+    \item To store events and alerts in \textbf{MongoDB}, expose them through a secure
+          \textbf{FastAPI} backend and visualise them in a \textbf{React} dashboard.
+    \item To \textbf{evaluate} the system on accuracy, precision, recall, F1-score,
+          false-positive rate, detection latency and resource overhead, on synthetic,
+          real-world and live-cluster data.
+\end{enumerate}
+
+\section{Scope of the Project}
+
+The system targets Linux nodes with kernel 5.8 or newer and BTF support, and was
+developed and evaluated on a single-node \textbf{minikube} cluster. It \emph{detects}
+and reports suspicious behaviour; it does not block or kill processes (prevention is
+listed as future work). Detection covers nine attack categories: reverse shell,
+dropper / payload, crypto-miner, privilege escalation, container escape, credential
+access, discovery, defense evasion and lateral movement.
+
+\section{Organisation of the Report}
+
+\begin{itemize}
+    \item \textbf{Chapter 2} surveys related work on system-call based intrusion
+          detection, container security, eBPF monitoring and public datasets.
+    \item \textbf{Chapter 3} analyses the existing and proposed systems and lists the
+          functional, non-functional, hardware and software requirements.
+    \item \textbf{Chapter 4} describes the datasets used for training and testing.
+    \item \textbf{Chapter 5} explains the proposed method: sensing, enrichment, feature
+          extraction, classification, rules and risk scoring.
+    \item \textbf{Chapter 6} presents the system design with architecture, UML and data
+          flow diagrams.
+    \item \textbf{Chapter 7} describes the implementation, modules, deployment and the
+          user interface.
+    \item \textbf{Chapter 8} reports testing and the experimental results.
+    \item \textbf{Chapter 9} concludes the report and outlines future work.
+\end{itemize}

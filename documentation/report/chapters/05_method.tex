@@ -1,0 +1,257 @@
+\chapter{Proposed Method}
+
+This chapter explains how a single kernel event becomes an alert. The processing
+pipeline is shown in Figure~\ref{fig:pipeline}: an eBPF program captures the event in
+the kernel, a C loader forwards it to the Python agent, the agent resolves its
+Kubernetes identity, extracts features, applies the Random Forest and the rule engine,
+computes a risk score and sends the result to the backend.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=0.55cm and 0.5cm, every node/.style={font=\small}]
+  \node[kbox, minimum width=4.2cm] (k) {Kernel tracepoints\\ \scriptsize execve, openat, connect, ...};
+  \node[kbox, below=of k, minimum width=4.2cm] (ebpf) {eBPF program (C, CO-RE)\\ \scriptsize in-kernel filtering};
+  \node[kbox, below=of ebpf, minimum width=4.2cm] (rb) {BPF ring buffer $\rightarrow$ C loader\\ \scriptsize JSON lines, drop counters};
+  \node[ubox, below=of rb, minimum width=4.2cm] (col) {Collector\\ \scriptsize normalise event};
+  \node[ubox, below=of col, minimum width=4.2cm] (enr) {Kubernetes enrichment\\ \scriptsize cgroup $\rightarrow$ Pod / container / workload};
+  \node[decision, below=0.5cm of enr] (ctx) {Pod context?};
+  \node[dbox, right=1.2cm of ctx] (raw) {Store as raw event};
+  \node[ubox, below=0.5cm of ctx, minimum width=4.2cm] (fe) {Feature extraction\\ \scriptsize 74 features + 60 s window};
+  \node[mlbox, below left=0.6cm and -1.6cm of fe, minimum width=3.2cm] (rf) {Random Forest\\ \scriptsize $P(\mathrm{mal})$, category};
+  \node[mlbox, below right=0.6cm and -1.6cm of fe, minimum width=3.2cm] (rules) {Rule engine\\ \scriptsize 19 rules};
+  \node[mlbox, below=1.9cm of fe, minimum width=4.2cm] (risk) {Risk score 0--100\\ \scriptsize severity, MITRE technique};
+  \node[dbox, below=of risk, minimum width=4.2cm] (be) {Backend: event / alert\\ \scriptsize de-duplication, MongoDB};
+
+  \draw[arr] (k) -- (ebpf);
+  \draw[arr] (ebpf) -- (rb);
+  \draw[arr] (rb) -- (col);
+  \draw[arr] (col) -- (enr);
+  \draw[arr] (enr) -- (ctx);
+  \draw[arr] (ctx) -- node[lbl, above]{no} (raw);
+  \draw[arr] (ctx) -- node[lbl, right]{yes} (fe);
+  \draw[arr] (fe) -- (rf);
+  \draw[arr] (fe) -- (rules);
+  \draw[arr] (rf) -- (risk);
+  \draw[arr] (rules) -- (risk);
+  \draw[arr] (risk) -- (be);
+  \draw[arr] (raw) |- (be);
+
+  \begin{scope}[on background layer]
+    \node[draw, dashed, rounded corners, fill=orange!3, fit=(k)(rb), inner sep=6pt,
+          label={[font=\scriptsize\itshape]left:kernel space}] {};
+    \node[draw, dashed, rounded corners, fill=blue!2, fit=(col)(risk)(rf)(rules), inner sep=6pt,
+          label={[font=\scriptsize\itshape]left:agent (user space)}] {};
+  \end{scope}
+\end{tikzpicture}
+\caption{Processing pipeline of the proposed system}
+\label{fig:pipeline}
+\end{figure}
+
+\section{Kernel-Level Event Capture with eBPF}
+
+The sensor is an eBPF program (\texttt{bpf/ids.bpf.c}) compiled with clang and loaded
+with libbpf using \emph{Compile Once -- Run Everywhere} (CO-RE). CO-RE relocates
+kernel structure offsets at load time using the kernel's BTF information, so one binary
+runs on any kernel version with BTF, without kernel headers on the node.
+
+The program attaches to the system-call tracepoints in Table~\ref{tab:tracepoints}.
+For every event it records the cgroup ID, PID, parent PID, user ID, process and parent
+name, and the arguments relevant for that call. Several filters run \emph{inside} the
+kernel to reduce overhead: \texttt{openat} events are only emitted for sensitive path
+prefixes, \texttt{chmod} only when SUID/SGID or execute bits are set, and
+\texttt{execve} is reported on syscall exit so that only \emph{successful} executions are
+emitted. Process arguments are copied up to eight arguments of 127 bytes. Events are
+written to a BPF ring buffer; if the buffer is full the event is counted in a per-CPU
+drop counter, which the agent reports so that data loss is never silent.
+
+\begin{table}[H]
+\centering
+\caption{Monitored system-call tracepoints}
+\label{tab:tracepoints}
+\footnotesize
+\begin{tabularx}{\textwidth}{l >{\raggedright\arraybackslash}p{5.2cm} >{\raggedright\arraybackslash}X}
+\toprule
+\textbf{Event type} & \textbf{Tracepoint(s)} & \textbf{Data captured} \\
+\midrule
+exec    & sys\_enter / sys\_exit\_execve & binary path, argv (8 $\times$ 127 B) \\
+open    & sys\_enter\_openat & path, flags (sensitive prefixes only) \\
+connect & sys\_enter\_connect & family, port, IPv4/IPv6 address, UNIX path \\
+ptrace  & sys\_enter\_ptrace & request, target PID \\
+setuid  & sys\_enter\_setuid, sys\_enter\_setresuid & target user ID \\
+mount   & sys\_enter\_mount & source, target, filesystem type \\
+unshare & sys\_enter\_unshare & namespace flags \\
+setns   & sys\_enter\_setns & namespace type \\
+chmod   & sys\_enter\_chmod, fchmodat, fchmodat2 & path, mode \\
+module  & sys\_enter\_init\_module, finit\_module & module load \\
+memfd   & sys\_enter\_memfd\_create & memfd name \\
+\midrule
+\multicolumn{3}{l}{\textbf{16 tracepoints in total}} \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+A small C program (\texttt{loader/ids\_loader.c}) loads and attaches the eBPF program,
+polls the ring buffer and prints each event as one JSON line on standard output, where
+the Python collector reads it.
+
+\section{Kubernetes Enrichment}
+
+Kernel events identify a container only through its \textbf{cgroup ID}. The enrichment
+module resolves the cgroup ID to the cgroup path under \texttt{/sys/fs/cgroup}. Regular
+expressions extract the \textbf{Pod UID} and the \textbf{container ID} from the path
+(for the systemd and cgroupfs layouts used by containerd and Docker). A cache of Pod
+objects on the node, refreshed from the Kubernetes API every 15 seconds, maps the Pod
+UID to the Pod name, namespace, container name, image, service account and node. The
+owning \textbf{workload} (Deployment, StatefulSet, DaemonSet, Job) is derived from owner
+references, for example a ReplicaSet \texttt{shop-web-7b955dcf77} belongs to
+Deployment \texttt{shop-web}. Events from processes outside any pod (the node itself)
+keep an empty namespace and are stored as \emph{raw} events.
+
+\section{Feature Extraction}
+
+The feature module (\texttt{ids\_agent/features.py}) converts an event and its
+behaviour window into a vector of \textbf{74 numeric features}. The same module is
+imported by the training script and by the live agent, which removes the
+train/serve mismatch of the v0 prototype. Table~\ref{tab:features} summarises the
+feature groups.
+
+\begin{table}[H]
+\centering
+\caption{Feature groups (74 features)}
+\label{tab:features}
+\small
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{3.3cm} c >{\raggedright\arraybackslash}X}
+\toprule
+\textbf{Group} & \textbf{\#} & \textbf{Examples} \\
+\midrule
+Event type (one-hot) & 11 & ev\_exec, ev\_open, ev\_connect, ev\_mount, ev\_memfd \\
+Identity & 2 & uid\_root, ns\_system (platform namespace) \\
+Command line & 9 & length, number of arguments, special characters, Shannon entropy, base64 blob, IP literal, URL, \texttt{/dev/tcp} \\
+Binary class & 10 & shell, network tool, interpreter, recon tool, container tool, escape tool, package manager, runs from /tmp, hidden, fileless \\
+Process lineage & 7 & K8s component, auth binary, debugger, parent is shell / server / interpreter / K8s component \\
+Argument patterns & 9 & sensitive path, download, download-and-execute, write to /tmp, SUID, reverse shell, miner, log cleanup, recon \\
+File & 2 & sensitivity level of path (0--2), write access \\
+Network & 7 & UNIX socket, common / suspicious / high port, private, loopback, link-local destination \\
+Privilege & 9 & ptrace attach, setuid to root, user / mount namespace unshare, SUID / exec chmod, benign memfd name, block-device mount, host-path mount \\
+Behaviour window & 8 & executions, distinct binaries, connections, distinct destinations, sensitive opens, shells, new binary, shell ratio \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\textbf{Command-line entropy.} For a command line $s$ with character frequencies $p_c$,
+the Shannon entropy
+\begin{equation}
+H(s) = -\sum_{c} p_c \log_2 p_c
+\end{equation}
+is high for encoded or random payloads and low for ordinary commands.
+
+\textbf{Behaviour window.} For each container the agent keeps a sliding window of the
+last $W = 60$ seconds of events. The window counts are log-transformed,
+$x' = \log(1 + x)$, so that bursts of thousands of events do not dominate. A binary is
+marked as \emph{new} if it has not been executed in the same workload before, once a
+warm-up period of five minutes has passed; this captures the classic sign of an
+intrusion: a container that suddenly runs programs it never ran before.
+
+\section{Random Forest Classifier}
+
+A Random Forest~\cite{breiman2001} is an ensemble of $T$ decision trees, each trained on
+a bootstrap sample of the training data with a random subset of features considered at
+every split. For an input vector $\mathbf{x}$, every tree $t$ outputs class
+probabilities $p_t(c \mid \mathbf{x})$ and the forest averages them:
+\begin{equation}
+P(c \mid \mathbf{x}) = \frac{1}{T} \sum_{t=1}^{T} p_t(c \mid \mathbf{x}).
+\end{equation}
+The model is trained on \textbf{ten classes} (benign and nine attack categories). Two
+quantities are derived from the output:
+\begin{align}
+P(\mathrm{mal} \mid \mathbf{x}) &= 1 - P(\mathrm{benign} \mid \mathbf{x}), \\
+\hat{c}(\mathbf{x}) &= \arg\max_{c \neq \mathrm{benign}} P(c \mid \mathbf{x}).
+\end{align}
+An event is an ML detection if $P(\mathrm{mal}) \geq \tau$ with $\tau = 0.5$; in
+platform namespaces (for example \texttt{kube-system}) without a matching rule, the
+threshold is raised to 0.75 because platform components legitimately perform many
+sensitive operations. The predicted attack category $\hat{c}$ selects the MITRE
+technique of an ML-only alert.
+
+\textbf{Hyper-parameters:} 150 trees, maximum depth 22, minimum one sample per leaf,
+$\sqrt{74}$ features per split, no class weighting, random state 42. Balanced class
+weights were tested and rejected: they raised detection to 100\% but increased the
+false-positive rate to 4.6\%, because up-weighting nine small attack classes inflates
+$P(\mathrm{mal})$.
+
+\section{Rule Engine}
+
+Rules provide high-precision detection of well-known techniques and an explanation
+that operators understand. Each rule receives the event and its feature vector and
+returns true or false; a failing rule is skipped and never stops the sensor. Platform
+components (Kubernetes namespaces such as \texttt{kube-system}, container runtimes,
+CoreDNS) are exempted where their normal behaviour would otherwise match.
+
+\begin{longtable}{p{1.0cm} p{6.6cm} p{1.5cm} p{2.2cm}}
+\caption{Detection rules}\label{tab:rules}\\
+\toprule
+\textbf{ID} & \textbf{Rule} & \textbf{Severity} & \textbf{MITRE} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{ID} & \textbf{Rule} & \textbf{Severity} & \textbf{MITRE} \\
+\midrule
+\endhead
+R001 & Reverse-shell command line & High & T1059.004 \\
+R002 & Shell / interpreter connecting to a suspicious port & High & T1571 \\
+R003 & Service-account token read by a shell tool & High & T1528 \\
+R004 & Password database read & High & T1003.008 \\
+R005 & Crypto-miner activity (arguments or pool ports) & High & T1496 \\
+R006 & Download piped into a shell & High & T1105 \\
+R007 & Binary executed from a temp / hidden location & Medium & T1204.002 \\
+R008 & Kernel module loaded from a pod & High & T1547.006 \\
+R009 & Process injection via ptrace & Medium & T1055.008 \\
+R010 & SUID/SGID bit set on a binary & High & T1548.001 \\
+R011 & Web / server process spawned a shell or recon tool & Medium & T1190 \\
+R012 & Fileless execution (memfd / fd exec) & High & T1620 \\
+R013 & Log or shell-history tampering & Medium & T1070 \\
+R014 & Container-escape technique (nsenter to PID 1, cgroup / block-device mount, user-namespace unshare, runtime socket, core\_pattern) & High & T1611 \\
+R015 & Cloud metadata endpoint access & Medium & T1552.005 \\
+R016 & Persistence / authentication file modified & High & T1098 \\
+R017 & Kubelet / etcd API accessed from a workload & High & T1210 \\
+R018 & Network scanning tool & Medium & T1046 \\
+R019 & Privilege escalation to root by a non-auth binary & High & T1068 \\
+\bottomrule
+\end{longtable}
+
+\section{Risk Scoring and Severity}
+
+ML and rules are combined into a single risk score. Let $H$ be the set of matched
+rules, $s(r)$ the score of rule $r$ ($\mathrm{High}=90$, $\mathrm{Medium}=70$,
+$\mathrm{Low}=45$) and $m = \mathbb{1}[P(\mathrm{mal}) \geq \tau]$ the ML decision. Then
+\begin{equation}
+S_0 = \max\Big( m \cdot 100\,P(\mathrm{mal}),\; \max_{r \in H} s(r) \Big)
+\end{equation}
+and the final score adds context bonuses and penalties and is clipped to $[0, 100]$:
+\begin{equation}
+S = \mathrm{clip}\big(S_0 + 5\cdot\mathbb{1}[H \neq \emptyset \wedge m]
+      + 3\cdot\mathbb{1}[\mathrm{uid}=0] - 10\cdot\mathbb{1}[\mathrm{ns\_system} \wedge H = \emptyset],\; 0,\; 100\big).
+\end{equation}
+The bonus of 5 rewards agreement of both detectors, running as root adds 3, and an
+ML-only verdict in a platform namespace loses 10. The event is \emph{suspicious} if
+$H \neq \emptyset$ or $m = 1$. Severity is assigned as
+\begin{equation}
+\mathrm{severity}(S) =
+\begin{cases}
+\mathrm{High}   & S \geq 80,\\
+\mathrm{Medium} & 60 \leq S < 80,\\
+\mathrm{Low}    & S < 60.
+\end{cases}
+\end{equation}
+The alert's category comes from the highest-severity matched rule, or from the ML
+prediction $\hat{c}$ if no rule matched. Each alert lists the matched rules, the ML
+probability, the MITRE techniques and the full Kubernetes context.
+
+\section{Alert De-duplication}
+
+An attacker who repeats a command, or a loop that runs every second, would otherwise
+create hundreds of identical alerts. The agent computes a de-duplication key as a SHA-1
+hash of namespace, workload, container, event type, process name, category and the
+command line (or path or destination). The backend merges a new alert into an
+unresolved alert with the same key seen within the last \textbf{10 minutes}, increments its
+\emph{count} and updates its last-seen time and maximum risk score.

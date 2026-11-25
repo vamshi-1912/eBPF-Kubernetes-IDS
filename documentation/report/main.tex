@@ -1,0 +1,136 @@
+\documentclass[12pt,a4paper]{report}
+\usepackage[top=1in, bottom=1in, left=1.5in, right=1.1in]{geometry}
+
+% ---------------------------------------------------------------- fonts & encoding
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{times}
+\usepackage{setspace}
+\usepackage{titlesec}
+\usepackage{tocloft}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{longtable}
+\usepackage{tabularx}
+\usepackage{fancyhdr}
+\usepackage{etoolbox}
+\usepackage{url}
+\usepackage{float}
+\usepackage{placeins}
+\usepackage{verbatim}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{caption}
+\usepackage{listings}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, shapes.geometric, shapes.multipart, fit, backgrounds, calc, shadows}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usepackage{eso-pic}
+\usepackage[hidelinks]{hyperref}
+
+\graphicspath{{figures/}}
+\setlist{itemsep=2pt, topsep=4pt}
+\setlength{\emergencystretch}{3em}
+\captionsetup{font=small, labelfont=bf}
+
+% ---------------------------------------------------------------- project details
+\newcommand{\projecttitle}{eBPF-Based Intrusion Detection System for Kubernetes}
+\newcommand{\PROJECTTITLE}{eBPF-BASED INTRUSION DETECTION SYSTEM FOR KUBERNETES}
+\newcommand{\reporttype}{A PROJECT REPORT}
+\newcommand{\supervisor}{Mrs. Geetla Srujana}
+\newcommand{\supervisordesig}{Assistant Professor}
+\newcommand{\submissionmonth}{NOVEMBER 2026}
+\newcommand{\studentA}{Yashoda Adarsh (B210010)}
+\newcommand{\studentB}{Arre Sahithya (B210722)}
+\newcommand{\studentC}{Angari Uday Kumar (B211449)}
+
+% ---------------------------------------------------------------- code listings
+\definecolor{codebg}{RGB}{246,246,246}
+\lstset{basicstyle=\ttfamily\footnotesize, backgroundcolor=\color{codebg}, frame=single,
+        rulecolor=\color{black!30}, breaklines=true, columns=fullflexible, keepspaces=true,
+        showstringspaces=false, aboveskip=6pt, belowskip=6pt}
+
+% ---------------------------------------------------------------- spacing & numbering
+\onehalfspacing
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0pt}
+\fancypagestyle{preliminary}{\fancyhf{}\cfoot{\thepage}\renewcommand{\headrulewidth}{0pt}}
+\fancypagestyle{main}{\fancyhf{}\cfoot{\thepage}\renewcommand{\headrulewidth}{0pt}}
+\fancypagestyle{plain}{\fancyhf{}\cfoot{\thepage}\renewcommand{\headrulewidth}{0pt}}
+
+% ---------------------------------------------------------------- headings
+\titleformat{\chapter}[display]
+  {\normalfont\huge\bfseries\centering}{\chaptertitlename\ \thechapter}{0.1pt}{\LARGE}
+\titleformat{\section}{\normalfont\bfseries\MakeUppercase}{\thesection}{1em}{}
+\titleformat{\subsection}{\normalfont\bfseries}{\thesubsection}{1em}{}
+\titleformat{\subsubsection}{\normalfont\bfseries\itshape}{\thesubsubsection}{1em}{}
+\titlespacing*{\chapter}{0pt}{-30pt}{20pt}
+\titlespacing*{\section}{0pt}{12pt}{6pt}
+\titlespacing*{\subsection}{0pt}{12pt}{6pt}
+\titlespacing*{\subsubsection}{0pt}{10pt}{4pt}
+\setcounter{secnumdepth}{2}
+\setcounter{tocdepth}{2}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{10pt}
+
+% ---------------------------------------------------------------- page border
+\AddToShipoutPictureBG{%
+  \AtPageLowerLeft{%
+    \begin{tikzpicture}[remember picture, overlay]
+      \draw[line width=1pt, color=black]
+        ([xshift=1.3in,yshift=0.9in]current page.south west)
+        rectangle
+        ([xshift=-0.9in,yshift=-0.9in]current page.north east);
+    \end{tikzpicture}%
+  }%
+}
+
+% ---------------------------------------------------------------- diagram styles
+\tikzset{
+  box/.style={draw, rounded corners=3pt, align=center, font=\small, inner sep=5pt, fill=white},
+  kbox/.style={box, fill=orange!12},
+  ubox/.style={box, fill=blue!8},
+  dbox/.style={box, fill=green!10},
+  mlbox/.style={box, fill=violet!10},
+  db/.style={draw, cylinder, shape border rotate=90, aspect=0.25, align=center, font=\small,
+             fill=yellow!15, minimum height=1.2cm, minimum width=2.2cm},
+  decision/.style={draw, diamond, aspect=2.2, align=center, font=\footnotesize, inner sep=1pt, fill=white},
+  arr/.style={-{Stealth[length=2.2mm]}, thick},
+  darr/.style={-{Stealth[length=2.2mm]}, thick, dashed},
+  lbl/.style={font=\scriptsize, fill=white, inner sep=1pt},
+}
+
+\begin{document}
+
+\pagenumbering{roman}
+\pagestyle{preliminary}
+
+\input{chapters/00_front}
+
+\pagenumbering{arabic}
+\pagestyle{main}
+
+\input{chapters/01_introduction}
+\input{chapters/02_literature}
+\input{chapters/03_analysis}
+\input{chapters/04_dataset}
+\input{chapters/05_method}
+\input{chapters/06_design}
+\input{chapters/07_implementation}
+\input{chapters/08_testing}
+\input{chapters/09_conclusion}
+
+\clearpage
+\renewcommand{\bibname}{References}
+\phantomsection
+\addcontentsline{toc}{chapter}{References}
+\input{chapters/10_references}
+
+\end{document}

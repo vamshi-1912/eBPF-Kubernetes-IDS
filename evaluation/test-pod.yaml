@@ -1,0 +1,31 @@
+# Interactive testing pod for trying attack / benign commands by hand.
+#
+#   docker build --network host -t ids-victim:latest evaluation/victim
+#   minikube image load ids-victim:latest
+#   kubectl apply -f evaluation/test-pod.yaml
+#   kubectl -n ids-test exec -it attack-lab -- bash
+#
+# Uses the evaluation image (python3, curl, wget, netcat, procps, util-linux).
+# Normal, non-privileged pod: escape attempts are detected but fail, as they
+# would in a hardened cluster. Remove with: kubectl delete namespace ids-test
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ids-test
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: attack-lab
+  namespace: ids-test
+  labels: {app: attack-lab}
+spec:
+  containers:
+    - name: lab
+      image: ids-victim:latest
+      imagePullPolicy: Never
+      command: ["sleep", "infinity"]
+      resources:
+        requests: {cpu: 20m, memory: 32Mi}
+        limits: {memory: 256Mi}
+  terminationGracePeriodSeconds: 1

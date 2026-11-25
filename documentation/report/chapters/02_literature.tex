@@ -1,0 +1,133 @@
+\chapter{Literature Survey}
+
+This chapter reviews the work this project builds on. It covers host-based intrusion
+detection from system calls, security of containers and Kubernetes, eBPF-based
+monitoring and detection, machine-learning techniques for intrusion detection, and
+the datasets available for evaluation. It ends with a comparison of existing
+approaches and the research gap addressed by this project.
+
+\section{Host-Based Intrusion Detection from System Calls}
+
+Forrest et al.~\cite{forrest1996} showed that short sequences of system calls form a
+stable ``sense of self'' for Unix processes and that deviations from this normal
+profile reveal intrusions. This work established system calls as the primary data
+source for host-based intrusion detection systems (HIDS). Later research replaced
+fixed sequence databases with statistical and machine-learning models, but the core
+idea of judging a process by its interaction with the kernel remains the foundation of
+runtime security today.
+
+Creech and Hu~\cite{creech2013} created the ADFA-LD dataset of Linux system-call traces
+to replace the outdated KDD data. Their experiments showed that models based only on
+system-call numbers struggle to separate modern attacks from normal behaviour, which
+motivates the use of richer context such as arguments, file paths and process lineage,
+as done in this project.
+
+\section{Security of Containers and Kubernetes}
+
+Sultan et al.~\cite{sultan2019} surveyed container security and grouped threats into
+attacks from inside a container, between containers, on the host and through the
+image supply chain. They emphasise that containers share the host kernel, so a
+compromised container is a direct threat to the node. The MITRE ATT\&CK Containers
+matrix~\cite{mitre} catalogues concrete techniques such as escape to host (T1611),
+deploying containers, accessing the container API and resource hijacking for
+crypto-mining (T1496). These techniques were used to define the attack categories of
+our dataset and to label alerts.
+
+Abed et al.~\cite{abed2015} applied the ``bag of system calls'' representation to Linux
+containers and showed that anomalous behaviour of containerised applications can be
+detected from system-call frequencies. Tien et al.~\cite{tien2019} proposed KubAnomaly,
+a neural-network based anomaly detector for Docker and Kubernetes that monitors
+containers through a kernel-level agent. Karn et al.~\cite{karn2021} detected
+crypto-mining pods in container clouds from system calls using explainable machine
+learning, demonstrating that model explanations help operators trust detections.
+
+\section{eBPF-Based Monitoring and Detection}
+
+eBPF allows verified programs to run in the Linux kernel and attach to tracepoints,
+kprobes and network hooks with low overhead~\cite{gregg2019, ebpfio}. It has become the
+basis of several CNCF runtime-security tools. \textbf{Falco}~\cite{falco} evaluates a
+rule language over system-call events; \textbf{Tetragon}~\cite{tetragon} provides
+eBPF-based process, file and network observability with Kubernetes identity and can
+enforce policies in the kernel; \textbf{Tracee}~\cite{tracee} offers signature-based
+detection on top of eBPF tracing. These tools are rule-driven: they are precise for
+known behaviour but do not score previously unseen variants.
+
+Research has started to combine eBPF with machine learning. Bachl et
+al.~\cite{bachl2021} implemented a flow-based IDS whose decision tree runs directly
+inside eBPF. Zhang et al.~\cite{zhang2024} executed a neural network in the kernel with
+eBPF for real-time intrusion detection and prevention. Kostopoulos et
+al.~\cite{kostopoulos2025} presented eIDPS, an eBPF and machine-learning based network
+intrusion detection and prevention solution. These systems focus mainly on
+\emph{network} traffic; host-level process behaviour inside Kubernetes pods, with Pod
+and workload context, is less covered.
+
+\section{Machine Learning for Intrusion Detection}
+
+Random Forests~\cite{breiman2001} combine many decision trees trained on bootstrap
+samples and random feature subsets. They handle mixed binary and numeric features,
+need little preprocessing, give calibrated class probabilities and provide feature
+importances, which makes them a common and strong baseline for intrusion detection on
+tabular features. Isolation Forest~\cite{liu2008} is an unsupervised anomaly detector
+that isolates rare points with random splits; it needs no attack labels but cannot tell
+\emph{which} attack occurred and usually produces more false positives. The first
+prototype of this project used Isolation Forest, and we keep it as a baseline.
+
+Sommer and Paxson~\cite{sommer2010} warned that machine learning for intrusion
+detection often looks excellent in the laboratory but fails in operation because of the
+gap between training data and real traffic, the high cost of false positives and the
+lack of interpretability. We address these concerns by (i) combining ML with
+interpretable rules, (ii) reporting false-positive rates explicitly, and (iii)
+evaluating on real public data in addition to our synthetic data.
+
+\section{Datasets for Runtime Intrusion Detection}
+
+\begin{itemize}
+    \item \textbf{ADFA-LD}~\cite{creech2013}: Linux system-call traces of normal use and
+          attacks; only system-call numbers, no arguments or containers.
+    \item \textbf{LID-DS}~\cite{grimmer2019}: system-call recordings of containerised
+          applications with CVE-based attack scenarios, recorded with sysdig.
+    \item \textbf{BETH}~\cite{highnam2021}: about eight million kernel events collected
+          with eBPF on cloud honeypots, labelled as benign, suspicious or evil.
+    \item \textbf{Splunk Attack Data / Cisco Isovalent}~\cite{splunkattack}: Tetragon
+          (eBPF) process events from attack simulations in a Kubernetes cluster, mapped to
+          MITRE ATT\&CK.
+\end{itemize}
+None of these datasets has the exact schema used by our sensor (one row per kernel
+event with Kubernetes namespace, behaviour-window counters and attack category), so we
+generated our own labelled dataset and converted BETH and the Isovalent data to our
+schema for independent testing (Chapter~4).
+
+\section{Comparison of Existing Approaches}
+
+\begin{table}[H]
+\centering
+\caption{Comparison of related approaches}
+\label{tab:litcompare}
+\small
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{2.6cm} >{\raggedright\arraybackslash}p{1.9cm} >{\raggedright\arraybackslash}p{2.1cm} >{\raggedright\arraybackslash}X}
+\toprule
+\textbf{Work / tool} & \textbf{Data source} & \textbf{Method} & \textbf{Limitation for our goal} \\
+\midrule
+Forrest et al.~\cite{forrest1996} & System calls & Sequence profile & No containers, no context \\
+Abed et al.~\cite{abed2015} & System calls & Bag of syscalls & Offline, no Kubernetes metadata \\
+KubAnomaly~\cite{tien2019} & Kernel agent & Neural network & Unsupervised score, no attack type \\
+Karn et al.~\cite{karn2021} & System calls & Explainable ML & Only crypto-mining \\
+Falco / Tracee~\cite{falco,tracee} & eBPF / syscalls & Rules & Detects only what rules describe \\
+Tetragon~\cite{tetragon} & eBPF & Policies & Observability / enforcement, no ML scoring \\
+Bachl et al., Zhang et al.~\cite{bachl2021,zhang2024} & eBPF (network) & ML in kernel & Network flows, not process behaviour \\
+eIDPS~\cite{kostopoulos2025} & eBPF (network) & ML + prevention & Network IDS, not pod runtime \\
+\midrule
+\textbf{This project} & eBPF (16 syscalls) & RF + 19 rules & Single-node evaluation; synthetic training attacks \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Research Gap}
+
+From the survey we identified the following gap: there is no simple, open,
+end-to-end system that (1) captures \emph{process, file, network and privilege}
+behaviour of Kubernetes pods with eBPF, (2) attaches \emph{Pod, container, namespace
+and workload} identity to every event, (3) combines a supervised multi-class model
+with interpretable rules to produce a \emph{risk score, severity and MITRE technique},
+and (4) is evaluated honestly on synthetic, real-world and live-cluster data including
+latency and resource overhead. This project addresses that gap.

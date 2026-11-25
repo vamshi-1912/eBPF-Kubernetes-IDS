@@ -1,0 +1,227 @@
+\chapter{Dataset Description}
+
+Supervised detection needs labelled examples of both normal and malicious runtime
+behaviour in exactly the format the sensor produces. No public dataset provides one
+row per kernel event with Kubernetes context, behaviour-window counters and an attack
+category (Section~2.5), so three sources were combined:
+\begin{enumerate}
+    \item a \textbf{synthetic runtime-telemetry dataset} generated for this project, which
+          provides all labelled attacks of the nine categories;
+    \item the public \textbf{BETH} dataset of real eBPF kernel events from cloud honeypots;
+    \item a real \textbf{Kubernetes container-escape} recording made with Tetragon
+          (Splunk Attack Data, Cisco Isovalent).
+\end{enumerate}
+All sources were converted to the same schema and merged into one final training set
+and one final test set (Section~4.5).
+
+\section{Event Schema}
+
+Every row describes one kernel event after Kubernetes enrichment, plus the behaviour of
+the same container in the preceding 60 seconds. Table~\ref{tab:schema} lists the
+columns. The same column names are produced by the live agent, so a model trained on
+these rows can be applied to live events without any conversion.
+
+\begin{longtable}{>{\ttfamily\footnotesize}p{4.0cm} >{\raggedright\arraybackslash}p{9.1cm}}
+\caption{Columns of the runtime-telemetry dataset}\label{tab:schema}\\
+\toprule
+\normalfont\textbf{Column} & \textbf{Description} \\
+\midrule
+\endfirsthead
+\toprule
+\normalfont\textbf{Column} & \textbf{Description} \\
+\midrule
+\endhead
+event\_type & exec, open, connect, ptrace, setuid, mount, unshare, chmod, module, memfd, setns \\
+comm, parent\_comm & Process name and parent process name (15 characters, as in the kernel) \\
+uid & Numeric user ID of the process \\
+path & Executed binary, opened file, UNIX socket, mount target or memfd name \\
+cmdline, argc & Command-line arguments (max.\ 8 $\times$ 127 bytes) and their count \\
+flags, arg2 & open flags, chmod mode, unshare flags, ptrace request or target uid \\
+dport, daddr & Destination port and address of a connection \\
+namespace & Kubernetes namespace of the pod \\
+win\_exec\_count & Executions in the container in the last 60 s \\
+win\_distinct\_bins & Distinct binaries executed in the window \\
+win\_connect\_count & Outgoing connections in the window \\
+win\_distinct\_dst & Distinct destinations (address:port) in the window \\
+win\_sensitive\_opens & Opens of sensitive files in the window \\
+win\_shell\_count & Shell executions in the window \\
+win\_new\_binary & 1 if the binary was never seen in this workload after a 5-minute warm-up \\
+is\_malicious & Ground truth: 0 = benign, 1 = malicious \\
+attack\_category & benign or one of nine attack categories \\
+mitre\_technique & MITRE ATT\&CK technique ID of the template \\
+template & Name of the generating template / scenario \\
+is\_edge\_case & 1 for benign-but-suspicious or malicious-but-benign-looking rows \\
+\bottomrule
+\end{longtable}
+
+\section{Synthetic Runtime-Telemetry Dataset}
+
+The generator (\texttt{ml/generate\_dataset.py}) produces events from \textbf{52 template
+families} (29 benign, 23 attack) with about 300 concrete command and event variants.
+IP addresses, ports, file names, user IDs, namespaces and behaviour windows are
+randomised, so no two rows are identical by construction. The 17 command patterns of
+the original v0 dataset are kept as templates. The command lines pass through the same
+truncation as the kernel probe (eight arguments of 127 bytes).
+
+\subsection{Composition}
+
+The training set was generated with 30,000 benign and 10,000 malicious events (seed 7);
+an independent test set with 12,000 benign and 8,000 malicious events uses a different
+random seed (2026). Table~\ref{tab:categories} shows the distribution of the training
+set over categories and the MITRE techniques covered.
+
+\begin{table}[H]
+\centering
+\caption{Synthetic training data by category (seed 7, 40,000 rows)}
+\label{tab:categories}
+\small
+\begin{tabular}{lrrl}
+\toprule
+\textbf{Category} & \textbf{Templates} & \textbf{Rows} & \textbf{Main MITRE techniques} \\
+\midrule
+Benign                & 29 & 30,000 & -- \\
+Reverse shell         & 5  & 2,135  & T1059.004, T1571 \\
+Dropper / payload     & 3  & 1,432  & T1105, T1204.002 \\
+Discovery             & 3  & 1,178  & T1613, T1046, T1190 \\
+Privilege escalation  & 3  & 1,126  & T1068, T1548.001, T1098 \\
+Container escape      & 2  & 1,033  & T1611, T1547.006 \\
+Credential access     & 2  & 1,021  & T1528, T1003.008, T1552 \\
+Crypto-miner          & 2  & 865    & T1496 \\
+Defense evasion       & 2  & 785    & T1070, T1620 \\
+Lateral movement      & 1  & 425    & T1210, T1021 \\
+\midrule
+\textbf{Total}        & \textbf{52} & \textbf{40,000} & \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The event types in the training set are dominated by process executions (23,262),
+followed by connections (6,889), sensitive file opens (5,162), chmod (1,256), memfd
+(1,129), setuid (1,017), mount (455), ptrace (385), setns (205), unshare (162) and
+kernel-module loads (78).
+
+\subsection{Edge Cases}
+
+More than half of the rows (24,589) are deliberate edge cases, flagged with
+\texttt{is\_edge\_case = 1}, so the model learns the difficult boundary between benign
+and malicious behaviour instead of trivial keywords:
+\begin{itemize}
+    \item \textbf{Benign but suspicious-looking:} \texttt{runc} and container runtimes
+          calling mount and namespace system calls, \texttt{nc -z} and \texttt{/dev/tcp}
+          wait-for loops, health probes with \texttt{curl \ldots{} || exit 1}, base64-decoded
+          configuration, Go and C builds executing from \texttt{/tmp}, CoreDNS reading its
+          service-account token, the API server reading \texttt{/etc/kubernetes/pki},
+          \texttt{sshd} reading \texttt{/etc/shadow}, PostgreSQL writing \texttt{/dev/shm},
+          CSI drivers mounting block devices, \texttt{strace} in development pods and
+          \texttt{kubectl} or \texttt{helm} in CI namespaces.
+    \item \textbf{Malicious but benign-looking:} reverse shells on ports 443, 80 and 53,
+          base64-obfuscated payloads, miners renamed to \texttt{nginx} or
+          \texttt{kworkerds}, fileless execution via \texttt{memfd\_create},
+          \texttt{curl \ldots{} | bash} from GitHub, slow-and-low connections and
+          reconnaissance spawned by a web server.
+\end{itemize}
+
+\section{BETH Dataset}
+
+BETH (BPF-extended tracking honeypot)~\cite{highnam2021} contains about eight million
+kernel events recorded with eBPF on 23 honeypot hosts of a major cloud provider. Each
+event records the timestamp, process and parent IDs, user ID, mount namespace, process
+name, host name, system-call name, arguments and two labels: \texttt{sus} (suspicious)
+and \texttt{evil}. The attacks are a real botnet compromise: an SSH login, system
+reconnaissance (\texttt{uname}, \texttt{/proc/cpuinfo}, \texttt{free}), download of a
+payload from a raw IP address with \texttt{wget}, preparation and launch of a
+crypto-miner from a hidden \texttt{/tmp/.X25-unix} directory and a mass SSH scan of
+thousands of hosts.
+
+\subsection{Conversion to the Project Schema}
+
+A converter (\texttt{ml/convert\_external.py}) keeps only the system calls that our
+sensor also captures and maps them to the project schema:
+\begin{itemize}
+    \item kernel calls are mapped as shown in Table~\ref{tab:bethmap};
+    \item behaviour-window columns are recomputed by replaying the events through the
+          agent's own window logic, keyed by host and mount namespace;
+    \item \texttt{is\_malicious} = \texttt{evil}; BETH has no Kubernetes namespace and no
+          attack categories.
+\end{itemize}
+\begin{table}[H]
+\centering
+\caption{Mapping of BETH system calls to the project's event types}
+\label{tab:bethmap}
+\small
+\begin{tabular}{>{\ttfamily}l l >{\raggedright\arraybackslash}p{6.2cm}}
+\toprule
+\normalfont\textbf{BETH event} & \textbf{Event type} & \textbf{Fields used} \\
+\midrule
+execve & exec & path, argv; the calling process becomes the parent \\
+security\_file\_open & open & path, O\_* flags \\
+connect & connect & port and address, or UNIX socket path \\
+setuid, setreuid & setuid & target user ID \\
+chmod, fchmod & chmod & path, mode \\
+mount & mount & source, target, filesystem type \\
+memfd\_create & memfd & memfd name \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Of 3,607,974 raw events in eight files, 938,432 events map to the sensor's event types
+(147,629 malicious). The conversion runs in parallel on all CPU cores and takes about
+two minutes.
+
+\section{Kubernetes Container-Escape Recording}
+
+The Splunk Attack Data repository~\cite{splunkattack} provides Tetragon
+\texttt{process\_exec} events recorded during a container escape in a Kubernetes cluster:
+an attacker opens a shell in a privileged pod, runs
+\texttt{nsenter --target 1} (entering all namespaces of the host's PID~1), obtains a shell on the
+host, mounts \texttt{/proc}, reads \texttt{/root/.ssh/authorized\_keys} and performs
+reconnaissance. The 25 events contain the binary, arguments, parent, user ID and Pod
+metadata. Each event was labelled by hand: 7 attacker actions are malicious; 15
+login-shell profile commands that run automatically after the escape and 3 pod start-up
+events are benign.
+
+\section{Final Training and Test Sets}
+
+The final split (\texttt{ml/build\_final\_dataset.py}) follows two principles:
+(1) the BETH data is split \emph{by host}, never by row, so near-identical events of one
+machine cannot appear in both sets; (2) no test data is used for training or tuning.
+Only benign BETH events of the development hosts (\texttt{evil = 0} and
+\texttt{sus = 0}, duplicates removed) are added to training, because the few malicious
+events on those hosts are mostly session noise and BETH has no attack categories.
+
+\begin{table}[H]
+\centering
+\caption{Final training and test datasets}
+\label{tab:finalsplit}
+\small
+\begin{tabular}{llrrr}
+\toprule
+\textbf{Split} & \textbf{Source} & \textbf{Rows} & \textbf{Malicious} & \textbf{Benign} \\
+\midrule
+\multirow{2}{*}{train.csv} & Synthetic (seed 7) & 40,000 & 10,000 & 30,000 \\
+ & BETH benign, 15 development hosts & 25,000 & 0 & 25,000 \\
+\cmidrule{2-5}
+ & \textbf{Total} & \textbf{65,000} & \textbf{10,000} & \textbf{55,000} \\
+\midrule
+\multirow{3}{*}{test.csv} & Synthetic (seed 2026) & 20,000 & 8,000 & 12,000 \\
+ & BETH held-out hosts 217 and 105 & 262,825 & 147,308 & 115,517 \\
+ & Kubernetes escape (Tetragon) & 25 & 7 & 18 \\
+\cmidrule{2-5}
+ & \textbf{Total} & \textbf{282,850} & \textbf{155,315} & \textbf{127,535} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Characteristics to keep in mind when reading the results:}
+\begin{itemize}
+    \item All attack examples used for training are synthetic; the real data contributes
+          only benign behaviour.
+    \item 98\% of the malicious BETH test events (144,801 of 147,308) belong to one
+          behaviour: the SSH-scanning bot. Results on BETH therefore mainly measure whether
+          this scanner is recognised.
+    \item BETH labels every event of the attacker's login session as evil, including
+          routine commands, which lowers the achievable per-event recall.
+    \item About 33\% of the test feature vectors also occur in the training data. We
+          verified that 91,820 of these 93,946 rows are benign file opens on BETH hosts that
+          run the same operating-system image, not leaked attacks.
+\end{itemize}

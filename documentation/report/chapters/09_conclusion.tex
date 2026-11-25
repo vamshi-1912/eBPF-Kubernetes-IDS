@@ -1,0 +1,86 @@
+\chapter{Conclusion and Future Scope}
+
+\section{Conclusion}
+
+This project designed, implemented and evaluated an \textbf{eBPF-based runtime
+intrusion detection system for Kubernetes}. The system observes the kernel activity of
+every container through an eBPF program on 16 system-call tracepoints, attaches Pod,
+container, namespace and workload identity to each event, extracts 74 behavioural
+features and classifies them with a 10-class Random Forest combined with 19
+deterministic rules. Every suspicious event becomes an explainable alert with a 0--100
+risk score, a Low / Medium / High severity and a MITRE ATT\&CK technique, which is
+stored in MongoDB, served by a FastAPI backend and visualised in a React dashboard. The
+whole system is deployed on minikube with a single script.
+
+The main outcomes are:
+\begin{itemize}
+    \item A working end-to-end pipeline \emph{Observe $\rightarrow$ Enrich $\rightarrow$
+          Detect $\rightarrow$ Score $\rightarrow$ Alert $\rightarrow$ Evaluate} that runs as
+          a standard Kubernetes DaemonSet without changes to the monitored applications.
+    \item A labelled runtime-telemetry dataset of 52 template families with deliberate
+          edge cases, and converters that map the public BETH dataset and Tetragon
+          recordings to the same schema.
+    \item A model that reaches an F1-score of 0.992 with a false-positive rate below
+          0.2\% on held-out synthetic data and detects eight times more attacks than the
+          Isolation Forest baseline of the first prototype.
+    \item Detection of \textbf{all 20 attack re-enactments} in the live cluster with an
+          average latency of \textbf{123 ms}, about 3.5\% of one CPU core, 200 MB of
+          memory and no lost kernel events.
+    \item An honest evaluation on real-world data, which showed very high precision but
+          also that synthetic attack examples do not cover all real attacker behaviour.
+\end{itemize}
+
+The project demonstrates that eBPF makes kernel-level runtime visibility practical in
+Kubernetes, and that combining interpretable rules with machine learning gives
+detections that are both broad and explainable. Its evaluation also shows why
+intrusion-detection results must be measured on data that differs from the training
+data before a model is trusted in production.
+
+\section{Limitations}
+
+\begin{itemize}
+    \item \textbf{Synthetic attack data:} all attack examples used for training are
+          generated; real-world recall is much lower than in-distribution recall
+          (Section~8.6).
+    \item \textbf{False positives from interactive shells:} network checks typed in an
+          interactive \texttt{kubectl exec} shell are flagged by the model.
+    \item \textbf{File paths:} file monitoring matches absolute paths only; relative
+          \texttt{openat} paths (for example after \texttt{cd /etc}) are not resolved.
+    \item \textbf{Argument truncation:} arguments are limited to 8 $\times$ 127 bytes in the
+          kernel.
+    \item \textbf{Overhead under exec storms:} every execution is scored in Python, which
+          costs about 21\% extra time in an exec-heavy micro-benchmark.
+    \item \textbf{Detection only:} the system raises alerts but does not block or kill
+          malicious processes.
+    \item \textbf{Scale:} the system was evaluated on a single-node minikube cluster.
+\end{itemize}
+
+\section{Future Scope}
+
+\begin{itemize}
+    \item \textbf{Better training data:} add generic attack families revealed by the
+          real-world evaluation (mass network scanning and worm spreading, downloads from
+          raw IP addresses, miners in hidden temporary directories, miner tuning such as
+          \texttt{modprobe msr}) and collect labelled telemetry from real workloads, while
+          keeping the BETH test hosts strictly for testing.
+    \item \textbf{Threshold calibration} on a validation split of the training data
+          instead of a fixed 0.5.
+    \item \textbf{Sequence and graph models:} model the order of events in a session or the
+          process tree (for example with recurrent networks or graph neural networks) to
+          catch multi-step attacks that look harmless event by event.
+    \item \textbf{Prevention:} use eBPF LSM hooks or Tetragon-style enforcement to block
+          high-confidence attacks such as container escapes in the kernel.
+    \item \textbf{Lower overhead:} move more filtering into the kernel, score only events
+          with Kubernetes context, and replace the Python window computation with an
+          incremental implementation (already used in the dataset converter).
+    \item \textbf{Multi-node and cloud deployment:} evaluate on multi-node clusters with
+          higher event rates and on managed Kubernetes services.
+    \item \textbf{Integrations:} send alerts to Slack, e-mail or a SIEM, and export metrics
+          to Prometheus and Grafana.
+    \item \textbf{Dashboard:} fix the narrow result column of the attack-simulation table,
+          add role-based users and alert assignment.
+\end{itemize}
+
+With these improvements the system can grow from a working research prototype into a
+practical runtime-security tool for small and medium-sized organisations that run
+their applications on Kubernetes.

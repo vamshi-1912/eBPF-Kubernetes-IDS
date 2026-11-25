@@ -19,3 +19,6 @@ services/ebpf-agent/build/
 
 # Logs
 *.log
+
+# External datasets (BETH, Splunk attack_data) - large, downloaded separately
+datasets/

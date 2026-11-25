@@ -1,0 +1,669 @@
+{
+  "generated_at": "2026-11-22T22:15:06.566803+00:00",
+  "model_version": "rf-20261107-161508",
+  "test_data": "datasets/final/test.csv",
+  "label_column": "is_malicious",
+  "threshold": 0.5,
+  "binary_ml": {
+    "samples": 282850,
+    "confusion_matrix": {
+      "tn": 127038,
+      "fp": 497,
+      "fn": 70118,
+      "tp": 85197
+    },
+    "accuracy": 0.7503,
+    "precision": 0.9942,
+    "recall_detection_rate": 0.5485,
+    "specificity": 0.9961,
+    "false_positive_rate": 0.0039,
+    "false_negative_rate": 0.4515,
+    "f1": 0.707,
+    "mcc": 0.5897,
+    "roc_auc": 0.9893,
+    "pr_auc": 0.9919
+  },
+  "multiclass": {
+    "accuracy": 0.9969,
+    "f1_macro": 0.9564,
+    "f1_weighted": 0.9969,
+    "labels": [
+      "benign",
+      "container_escape",
+      "credential_access",
+      "crypto_miner",
+      "defense_evasion",
+      "discovery",
+      "dropper",
+      "lateral_movement",
+      "privilege_escalation",
+      "reverse_shell"
+    ],
+    "confusion_matrix": [
+      [
+        127534,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        21,
+        812,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        32,
+        3,
+        775,
+        0,
+        0,
+        1,
+        0,
+        0,
+        1,
+        0
+      ],
+      [
+        27,
+        0,
+        0,
+        703,
+        0,
+        0,
+        27,
+        0,
+        0,
+        0
+      ],
+      [
+        21,
+        2,
+        0,
+        0,
+        577,
+        0,
+        0,
+        0,
+        30,
+        0
+      ],
+      [
+        16,
+        0,
+        1,
+        0,
+        0,
+        918,
+        0,
+        4,
+        0,
+        0
+      ],
+      [
+        28,
+        0,
+        0,
+        1,
+        0,
+        0,
+        1070,
+        0,
+        3,
+        0
+      ],
+      [
+        21,
+        0,
+        0,
+        0,
+        0,
+        53,
+        1,
+        235,
+        0,
+        1
+      ],
+      [
+        50,
+        0,
+        0,
+        0,
+        0,
+        0,
+        9,
+        0,
+        890,
+        0
+      ],
+      [
+        16,
+        0,
+        0,
+        1,
+        0,
+        8,
+        2,
+        4,
+        33,
+        1610
+      ]
+    ],
+    "per_class": {
+      "benign": {
+        "precision": 0.9982,
+        "recall": 1.0,
+        "f1-score": 0.9991,
+        "support": 127535.0
+      },
+      "container_escape": {
+        "precision": 0.9939,
+        "recall": 0.9748,
+        "f1-score": 0.9842,
+        "support": 833.0
+      },
+      "credential_access": {
+        "precision": 0.9987,
+        "recall": 0.9544,
+        "f1-score": 0.9761,
+        "support": 812.0
+      },
+      "crypto_miner": {
+        "precision": 0.9972,
+        "recall": 0.9287,
+        "f1-score": 0.9617,
+        "support": 757.0
+      },
+      "defense_evasion": {
+        "precision": 1.0,
+        "recall": 0.9159,
+        "f1-score": 0.9561,
+        "support": 630.0
+      },
+      "discovery": {
+        "precision": 0.9358,
+        "recall": 0.9776,
+        "f1-score": 0.9563,
+        "support": 939.0
+      },
+      "dropper": {
+        "precision": 0.9648,
+        "recall": 0.971,
+        "f1-score": 0.9679,
+        "support": 1102.0
+      },
+      "lateral_movement": {
+        "precision": 0.9671,
+        "recall": 0.7556,
+        "f1-score": 0.8484,
+        "support": 311.0
+      },
+      "privilege_escalation": {
+        "precision": 0.93,
+        "recall": 0.9378,
+        "f1-score": 0.9339,
+        "support": 949.0
+      },
+      "reverse_shell": {
+        "precision": 0.9994,
+        "recall": 0.9618,
+        "f1-score": 0.9802,
+        "support": 1674.0
+      }
+    }
+  },
+  "per_group": {
+    "beth_test": {
+      "samples": 262825,
+      "confusion_matrix": {
+        "tn": 115036,
+        "fp": 481,
+        "fn": 70002,
+        "tp": 77306
+      },
+      "accuracy": 0.7318,
+      "precision": 0.9938,
+      "recall_detection_rate": 0.5248,
+      "specificity": 0.9958,
+      "false_positive_rate": 0.0042,
+      "false_negative_rate": 0.4752,
+      "f1": 0.6869,
+      "mcc": 0.5661,
+      "roc_auc": 0.9878,
+      "pr_auc": 0.9911
+    },
+    "k8s_escape": {
+      "samples": 25,
+      "confusion_matrix": {
+        "tn": 17,
+        "fp": 1,
+        "fn": 6,
+        "tp": 1
+      },
+      "accuracy": 0.72,
+      "precision": 0.5,
+      "recall_detection_rate": 0.1429,
+      "specificity": 0.9444,
+      "false_positive_rate": 0.0556,
+      "false_negative_rate": 0.8571,
+      "f1": 0.2222,
+      "mcc": 0.1445,
+      "roc_auc": 0.7143,
+      "pr_auc": 0.5769
+    },
+    "synthetic": {
+      "samples": 20000,
+      "confusion_matrix": {
+        "tn": 11985,
+        "fp": 15,
+        "fn": 110,
+        "tp": 7890
+      },
+      "accuracy": 0.9938,
+      "precision": 0.9981,
+      "recall_detection_rate": 0.9862,
+      "specificity": 0.9988,
+      "false_positive_rate": 0.0012,
+      "false_negative_rate": 0.0138,
+      "f1": 0.9921,
+      "mcc": 0.987,
+      "roc_auc": 0.9998,
+      "pr_auc": 0.9998
+    }
+  },
+  "edge_cases": {
+    "samples": 11921,
+    "confusion_matrix": {
+      "tn": 7676,
+      "fp": 14,
+      "fn": 86,
+      "tp": 4145
+    },
+    "accuracy": 0.9916,
+    "precision": 0.9966,
+    "recall_detection_rate": 0.9797,
+    "specificity": 0.9982,
+    "false_positive_rate": 0.0018,
+    "false_negative_rate": 0.0203,
+    "f1": 0.9881,
+    "mcc": 0.9817,
+    "roc_auc": 0.9997,
+    "pr_auc": 0.9995
+  },
+  "non_edge_cases": {
+    "samples": 270929,
+    "confusion_matrix": {
+      "tn": 119362,
+      "fp": 483,
+      "fn": 70032,
+      "tp": 81052
+    },
+    "accuracy": 0.7397,
+    "precision": 0.9941,
+    "recall_detection_rate": 0.5365,
+    "specificity": 0.996,
+    "false_positive_rate": 0.004,
+    "false_negative_rate": 0.4635,
+    "f1": 0.6969,
+    "mcc": 0.5765,
+    "roc_auc": 0.9885,
+    "pr_auc": 0.9915
+  },
+  "binary_agent_ml_plus_rules": {
+    "samples": 282850,
+    "confusion_matrix": {
+      "tn": 126340,
+      "fp": 1195,
+      "fn": 70048,
+      "tp": 85267
+    },
+    "accuracy": 0.7481,
+    "precision": 0.9862,
+    "recall_detection_rate": 0.549,
+    "specificity": 0.9906,
+    "false_positive_rate": 0.0094,
+    "false_negative_rate": 0.451,
+    "f1": 0.7053,
+    "mcc": 0.5828
+  },
+  "threshold_sweep": [
+    {
+      "threshold": 0.1,
+      "precision": 0.5976,
+      "recall_detection_rate": 0.9982,
+      "false_positive_rate": 0.8186,
+      "f1": 0.7476,
+      "accuracy": 0.6299
+    },
+    {
+      "threshold": 0.2,
+      "precision": 0.886,
+      "recall_detection_rate": 0.9924,
+      "false_positive_rate": 0.1555,
+      "f1": 0.9362,
+      "accuracy": 0.9257
+    },
+    {
+      "threshold": 0.3,
+      "precision": 0.9392,
+      "recall_detection_rate": 0.9864,
+      "false_positive_rate": 0.0778,
+      "f1": 0.9622,
+      "accuracy": 0.9575
+    },
+    {
+      "threshold": 0.4,
+      "precision": 0.9825,
+      "recall_detection_rate": 0.9841,
+      "false_positive_rate": 0.0213,
+      "f1": 0.9833,
+      "accuracy": 0.9817
+    },
+    {
+      "threshold": 0.5,
+      "precision": 0.9942,
+      "recall_detection_rate": 0.5485,
+      "false_positive_rate": 0.0039,
+      "f1": 0.707,
+      "accuracy": 0.7503
+    },
+    {
+      "threshold": 0.6,
+      "precision": 0.9978,
+      "recall_detection_rate": 0.5481,
+      "false_positive_rate": 0.0015,
+      "f1": 0.7076,
+      "accuracy": 0.7512
+    },
+    {
+      "threshold": 0.7,
+      "precision": 1.0,
+      "recall_detection_rate": 0.5473,
+      "false_positive_rate": 0.0,
+      "f1": 0.7074,
+      "accuracy": 0.7514
+    },
+    {
+      "threshold": 0.8,
+      "precision": 1.0,
+      "recall_detection_rate": 0.0477,
+      "false_positive_rate": 0.0,
+      "f1": 0.0911,
+      "accuracy": 0.4771
+    },
+    {
+      "threshold": 0.9,
+      "precision": 1.0,
+      "recall_detection_rate": 0.0425,
+      "false_positive_rate": 0.0,
+      "f1": 0.0815,
+      "accuracy": 0.4742
+    }
+  ],
+  "templates_with_errors": {
+    "exec/evil": {
+      "label": "malicious",
+      "samples": 107,
+      "errors": 107,
+      "error_rate": 1.0
+    },
+    "host reconnaissance": {
+      "label": "malicious",
+      "samples": 3,
+      "errors": 3,
+      "error_rate": 1.0
+    },
+    "interactive shell on the host": {
+      "label": "malicious",
+      "samples": 1,
+      "errors": 1,
+      "error_rate": 1.0
+    },
+    "memfd/evil": {
+      "label": "malicious",
+      "samples": 3,
+      "errors": 3,
+      "error_rate": 1.0
+    },
+    "mounting host procfs": {
+      "label": "malicious",
+      "samples": 1,
+      "errors": 1,
+      "error_rate": 1.0
+    },
+    "reading root SSH authorized_keys": {
+      "label": "malicious",
+      "samples": 1,
+      "errors": 1,
+      "error_rate": 1.0
+    },
+    "setuid/evil": {
+      "label": "malicious",
+      "samples": 2,
+      "errors": 2,
+      "error_rate": 1.0
+    },
+    "open/evil": {
+      "label": "malicious",
+      "samples": 2353,
+      "errors": 2347,
+      "error_rate": 0.9975
+    },
+    "connect/evil": {
+      "label": "malicious",
+      "samples": 144843,
+      "errors": 67543,
+      "error_rate": 0.4663
+    },
+    "chmod_tmp_payload": {
+      "label": "malicious",
+      "samples": 183,
+      "errors": 15,
+      "error_rate": 0.082
+    },
+    "login-shell profile noise after escape": {
+      "label": "benign",
+      "samples": 15,
+      "errors": 1,
+      "error_rate": 0.0667
+    },
+    "tamper_auth_files": {
+      "label": "malicious",
+      "samples": 320,
+      "errors": 16,
+      "error_rate": 0.05
+    },
+    "chmod/benign": {
+      "label": "benign",
+      "samples": 106,
+      "errors": 4,
+      "error_rate": 0.0377
+    },
+    "exploit_setuid": {
+      "label": "malicious",
+      "samples": 306,
+      "errors": 11,
+      "error_rate": 0.0359
+    },
+    "connect/benign": {
+      "label": "benign",
+      "samples": 919,
+      "errors": 31,
+      "error_rate": 0.0337
+    },
+    "exec/benign": {
+      "label": "benign",
+      "samples": 604,
+      "errors": 20,
+      "error_rate": 0.0331
+    },
+    "lateral_movement": {
+      "label": "malicious",
+      "samples": 311,
+      "errors": 10,
+      "error_rate": 0.0322
+    },
+    "apiserver_probe_connect": {
+      "label": "malicious",
+      "samples": 209,
+      "errors": 6,
+      "error_rate": 0.0287
+    },
+    "host_credential_theft": {
+      "label": "malicious",
+      "samples": 397,
+      "errors": 11,
+      "error_rate": 0.0277
+    },
+    "miner_connect": {
+      "label": "malicious",
+      "samples": 304,
+      "errors": 8,
+      "error_rate": 0.0263
+    },
+    "log_tampering": {
+      "label": "malicious",
+      "samples": 323,
+      "errors": 5,
+      "error_rate": 0.0155
+    },
+    "miner_exec": {
+      "label": "malicious",
+      "samples": 453,
+      "errors": 7,
+      "error_rate": 0.0155
+    },
+    "wait_for_dependency": {
+      "label": "benign",
+      "samples": 518,
+      "errors": 7,
+      "error_rate": 0.0135
+    },
+    "escape_syscall": {
+      "label": "malicious",
+      "samples": 390,
+      "errors": 5,
+      "error_rate": 0.0128
+    },
+    "suid_abuse": {
+      "label": "malicious",
+      "samples": 323,
+      "errors": 4,
+      "error_rate": 0.0124
+    },
+    "fileless_exec": {
+      "label": "malicious",
+      "samples": 307,
+      "errors": 3,
+      "error_rate": 0.0098
+    },
+    "orig_anomalous": {
+      "label": "malicious",
+      "samples": 294,
+      "errors": 2,
+      "error_rate": 0.0068
+    },
+    "legit_download": {
+      "label": "benign",
+      "samples": 405,
+      "errors": 2,
+      "error_rate": 0.0049
+    },
+    "sa_token_theft": {
+      "label": "malicious",
+      "samples": 415,
+      "errors": 2,
+      "error_rate": 0.0048
+    },
+    "entrypoint_script": {
+      "label": "benign",
+      "samples": 672,
+      "errors": 3,
+      "error_rate": 0.0045
+    },
+    "open/benign": {
+      "label": "benign",
+      "samples": 113830,
+      "errors": 426,
+      "error_rate": 0.0037
+    },
+    "dropper_download": {
+      "label": "malicious",
+      "samples": 601,
+      "errors": 2,
+      "error_rate": 0.0033
+    },
+    "network_scan": {
+      "label": "malicious",
+      "samples": 319,
+      "errors": 1,
+      "error_rate": 0.0031
+    },
+    "benign_chmod": {
+      "label": "benign",
+      "samples": 369,
+      "errors": 1,
+      "error_rate": 0.0027
+    },
+    "escape_exec": {
+      "label": "malicious",
+      "samples": 436,
+      "errors": 1,
+      "error_rate": 0.0023
+    },
+    "reverse_shell_connect": {
+      "label": "malicious",
+      "samples": 428,
+      "errors": 1,
+      "error_rate": 0.0023
+    },
+    "app_start": {
+      "label": "benign",
+      "samples": 743,
+      "errors": 1,
+      "error_rate": 0.0013
+    },
+    "package_and_build": {
+      "label": "benign",
+      "samples": 768,
+      "errors": 1,
+      "error_rate": 0.0013
+    }
+  },
+  "train_overlap": {
+    "identical_feature_vectors": 93946,
+    "fraction": 0.3321
+  },
+  "unseen_vectors_only": {
+    "samples": 188904,
+    "confusion_matrix": {
+      "tn": 33153,
+      "fp": 487,
+      "fn": 70118,
+      "tp": 85146
+    },
+    "accuracy": 0.6262,
+    "precision": 0.9943,
+    "recall_detection_rate": 0.5484,
+    "specificity": 0.9855,
+    "false_positive_rate": 0.0145,
+    "false_negative_rate": 0.4516,
+    "f1": 0.7069,
+    "mcc": 0.4103,
+    "roc_auc": 0.9693,
+    "pr_auc": 0.9933
+  },
+  "features": 74
+}

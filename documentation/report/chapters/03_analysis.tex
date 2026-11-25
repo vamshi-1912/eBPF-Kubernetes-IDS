@@ -1,0 +1,189 @@
+\chapter{System Analysis and Requirements}
+
+\section{Existing System}
+
+In a typical small or medium-sized Kubernetes deployment, security is handled by a
+combination of image scanning in the CI pipeline, Kubernetes RBAC and network
+policies, and manual inspection of logs with \texttt{kubectl logs} or a log
+aggregation stack. The first prototype of this project (``v0'') followed the same
+spirit: a BCC probe captured only the file name of executed programs, an offline log
+parser stored them in PostgreSQL and an Isolation Forest flagged unusual command names.
+
+\subsection{Limitations of the Existing System}
+\begin{itemize}
+    \item \textbf{No runtime visibility:} scanners and policies do not see process, file
+          and network behaviour after a pod starts; application logs rarely record an
+          attacker's shell commands.
+    \item \textbf{Narrow sensor:} the v0 probe captured only \texttt{execve} file names,
+          not arguments, files, network destinations or privilege changes.
+    \item \textbf{No Kubernetes context:} events could not be linked to a Pod, namespace
+          or workload, so an operator could not tell which application was affected.
+    \item \textbf{Weak detection:} the unsupervised Isolation Forest detected only 12\% of
+          attacks on our test set (Chapter~8) and produced string-matching false positives,
+          for example \texttt{runc} matched as netcat because it contains ``nc''.
+    \item \textbf{No risk scoring or explanation:} there was no severity, no MITRE
+          technique and no matched rule to explain an alert.
+    \item \textbf{Train/serve mismatch:} the model was trained on full command lines while
+          the probe delivered only binary paths.
+    \item \textbf{No evaluation:} detection rate, false positives, latency and overhead
+          were never measured.
+\end{itemize}
+
+\section{Proposed System}
+
+The proposed system is a complete runtime IDS built on the pipeline
+\emph{Observe $\rightarrow$ Enrich $\rightarrow$ Detect $\rightarrow$ Score $\rightarrow$
+Alert $\rightarrow$ Evaluate}.
+
+\subsection{Features of the Proposed System}
+\begin{itemize}
+    \item \textbf{Kernel-level sensing with eBPF:} a libbpf CO-RE program on 16
+          system-call tracepoints captures process execution with arguments, sensitive
+          file opens, network connections, \texttt{ptrace}, \texttt{setuid},
+          \texttt{mount}, \texttt{unshare}, \texttt{setns}, \texttt{chmod}, kernel-module
+          loading and \texttt{memfd\_create}.
+    \item \textbf{Kubernetes enrichment:} every event is resolved from its cgroup to Pod,
+          container, namespace, workload, image, service account and node.
+    \item \textbf{Shared feature extraction:} one Python module computes 74 features for
+          both training and live inference, removing train/serve skew.
+    \item \textbf{Hybrid detection:} a 10-class Random Forest and 19 deterministic rules
+          with exemptions for platform components.
+    \item \textbf{Risk scoring and alerting:} 0--100 risk score, Low / Medium / High
+          severity, MITRE ATT\&CK technique and de-duplication of repeated alerts.
+    \item \textbf{Dashboard:} React web interface with overview, alerts, events and
+          evaluation pages, protected by JWT login.
+    \item \textbf{Built-in evaluation:} offline model metrics, live agent heartbeats
+          (CPU, memory, latency, dropped events) and an automated attack simulation.
+\end{itemize}
+
+\subsection{Advantages of the Proposed System}
+\begin{itemize}
+    \item Observes what workloads actually do at runtime, without modifying them.
+    \item Gives every alert an owner (Pod, namespace, workload) and an explanation (rules,
+          ML probability, MITRE technique).
+    \item Detects both known patterns (rules) and variants of them (ML).
+    \item Reduces false positives on legitimate platform behaviour through exemptions and
+          edge-case training data.
+    \item Runs as a standard DaemonSet with low CPU and memory overhead.
+    \item Reports its own accuracy and overhead, so its limits are visible.
+\end{itemize}
+
+\section{Feasibility Study}
+
+\begin{itemize}
+    \item \textbf{Technical feasibility:} eBPF CO-RE is supported by all mainstream Linux
+          kernels since 5.8; libbpf, scikit-learn, FastAPI, MongoDB and React are mature
+          open-source technologies.
+    \item \textbf{Economic feasibility:} all components are free and open source and the
+          whole system runs on a single laptop with minikube.
+    \item \textbf{Operational feasibility:} the system is deployed with one script and used
+          through a web browser; no change to monitored applications is required.
+\end{itemize}
+
+\section{Requirement Analysis}
+
+\subsection{Functional Requirements}
+
+\subsubsection*{1. Event Monitoring}
+\begin{itemize}
+    \item Capture process execution (path and arguments), sensitive file opens, network
+          connections and security-sensitive system calls on every node.
+    \item Filter uninteresting events inside the kernel to limit overhead.
+    \item Report kernel-side drops (ring-buffer full) so data loss is visible.
+\end{itemize}
+
+\subsubsection*{2. Kubernetes Enrichment}
+\begin{itemize}
+    \item Map every event to Pod, container, namespace, workload, image, service account
+          and node.
+    \item Store events without Kubernetes context (host processes) as ``raw''.
+\end{itemize}
+
+\subsubsection*{3. Detection and Scoring}
+\begin{itemize}
+    \item Extract a fixed feature vector per event including a 60-second behaviour window.
+    \item Classify each event with the ML model and evaluate the rule set.
+    \item Produce a risk score (0--100), severity (Low / Medium / High), attack category
+          and MITRE ATT\&CK technique.
+    \item Merge identical alerts from the same container within ten minutes.
+\end{itemize}
+
+\subsubsection*{4. Storage and API}
+\begin{itemize}
+    \item Store events, alerts, agent metrics, evaluation results and users in MongoDB.
+    \item Expire old events (24 h) and alerts (30 days) automatically.
+    \item Provide REST endpoints for ingestion (agent token) and for the dashboard (JWT).
+\end{itemize}
+
+\subsubsection*{5. Dashboard}
+\begin{itemize}
+    \item Secure login for administrators.
+    \item Overview of events, open alerts, severities, attack categories, riskiest pods,
+          agent overhead and detection latency.
+    \item Search and filter alerts and events; acknowledge or resolve alerts.
+    \item Show offline and live evaluation results.
+\end{itemize}
+
+\subsubsection*{6. Evaluation}
+\begin{itemize}
+    \item Compute accuracy, precision, recall, F1-score, false-positive rate and ROC-AUC
+          offline.
+    \item Run harmless attack and benign scenarios in a test pod and measure detection
+          rate, false positives, latency and execution overhead.
+\end{itemize}
+
+\subsection{Non-Functional Requirements}
+\begin{itemize}
+    \item \textbf{Performance:} detection latency below one second; agent CPU below 10\%
+          of one core at normal event rates; zero dropped kernel events.
+    \item \textbf{Security:} JWT authentication for users, a separate shared token for
+          agents, bcrypt password hashing, random credentials in a Kubernetes Secret.
+    \item \textbf{Reliability:} a failing rule or a malformed event must never stop the
+          sensor.
+    \item \textbf{Scalability:} one agent per node through a DaemonSet; stateless backend.
+    \item \textbf{Usability:} explainable alerts and a simple web interface.
+    \item \textbf{Maintainability:} modular code with unit tests; one feature module shared
+          by training and inference.
+    \item \textbf{Portability:} CO-RE eBPF binary runs on any kernel with BTF without
+          recompilation.
+\end{itemize}
+
+\subsection{Hardware Requirements}
+
+\begin{table}[H]
+\centering
+\caption{Hardware requirements}
+\label{tab:hw}
+\begin{tabular}{lll}
+\toprule
+\textbf{Component} & \textbf{Minimum} & \textbf{Recommended} \\
+\midrule
+Processor & 2 cores, x86\_64 & 4 cores \\
+RAM & 6 GB & 8 GB or more \\
+Free disk space & 15 GB & 20 GB \\
+Network & Internet for first image build & -- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Software Requirements}
+
+\begin{table}[H]
+\centering
+\caption{Software requirements}
+\label{tab:sw}
+\begin{tabular}{lll}
+\toprule
+\textbf{Software} & \textbf{Version (tested)} & \textbf{Purpose} \\
+\midrule
+Ubuntu Linux & 22.04 / 24.04, kernel 6.8 & Host OS, kernel $\geq$ 5.8 with BTF \\
+Docker & 24+ & Image build, minikube driver \\
+minikube & 1.32+ & Local Kubernetes cluster \\
+kubectl & 1.28+ & Cluster management \\
+Python & 3.12 & Agent, ML, backend, evaluation \\
+Node.js + npm & 18+ & Dashboard development \\
+clang / libbpf & (inside Docker build) & Compile eBPF program \\
+Git / GitHub & any & Version control \\
+\bottomrule
+\end{tabular}
+\end{table}

